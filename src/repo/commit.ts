@@ -2,10 +2,15 @@ import type { GitHubClient, Snapshot, TreeWrite } from '../github/client.ts'
 import { toGitHubError } from '../github/errors.ts'
 import { conflictPath } from './paths.ts'
 
-/** One file change. content=null deletes the file. */
+/** Reference to a blob already in the repo (moves/renames reuse it without re-uploading). */
+export interface BlobRef {
+  sha: string
+}
+
+/** One file change. content=null deletes the file; a BlobRef writes an existing blob. */
 export interface Change {
   path: string
-  content: string | null
+  content: string | null | BlobRef
   /**
    * Blob SHA the change was based on (null = file did not exist).
    * Defaults to the SHA in the base snapshot passed to commitChanges.
@@ -81,14 +86,14 @@ export async function commitChanges(
         if (remote !== null && remote === expected) writes.push({ path: c.path, sha: null })
         continue
       }
-      const sha = await blobFor(c.content)
+      const sha = typeof c.content === 'string' ? await blobFor(c.content) : c.content.sha
       if (remote === sha) continue // already identical
       if (remote !== expected && remote !== null) {
         target = conflictPath(c.path, now(), taken)
         conflicts.push({ path: c.path, copyPath: target })
       }
       writes.push({ path: target, sha })
-      written.push({ path: target, sha, content: c.content })
+      if (typeof c.content === 'string') written.push({ path: target, sha, content: c.content })
     }
 
     if (writes.length === 0) return { snapshot: head, committed: false, conflicts, written }

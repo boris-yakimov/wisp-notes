@@ -4,7 +4,8 @@ import { Link, Navigate, Route, Routes, useNavigate } from 'react-router'
 import { AppShell } from './components/AppShell.tsx'
 import { NotePage } from './components/NotePage.tsx'
 import { SettingsPage } from './components/SettingsPage.tsx'
-import { Sidebar } from './components/Sidebar.tsx'
+import { NotesSidebar } from './components/NotesSidebar.tsx'
+import { DialogHost } from './components/DialogHost.tsx'
 import { Notices, SaveStatus, StatusBar } from './components/StatusBar.tsx'
 import { SessionProvider } from './components/Workspace.tsx'
 import type { RepoSession } from './repo/session.ts'
@@ -56,7 +57,7 @@ function Connected({ session }: { session: RepoSession }) {
   return (
     <>
       <AppShell
-        sidebar={<Sidebar />}
+        sidebar={<NotesSidebar />}
         topBarRight={
           <>
             <SaveStatus />
@@ -72,6 +73,7 @@ function Connected({ session }: { session: RepoSession }) {
         statusBar={<StatusBar />}
       />
       <Notices />
+      <DialogHost />
     </>
   )
 }

@@ -264,9 +264,10 @@ export class RepoSession {
   /** Record an edit: persisted to IndexedDB immediately, committed by the auto-saver. */
   async editNote(path: string, content: string): Promise<void> {
     const existing = this.drafts.get(path)
-    const baseSha = existing ? existing.baseSha : (this.remoteSha(path) ?? null)
+    // Based on the displayed SHA: optimistic creates use the real git SHA, so they match once committed.
+    const baseSha = existing ? existing.baseSha : (this.shaOf(path) ?? null)
     // Editing back to the saved content (e.g. undo) clears the draft.
-    if (baseSha && baseSha === this.remoteSha(path) && this.savedContent.get(path) === content) {
+    if (baseSha && baseSha === this.shaOf(path) && this.savedContent.get(path) === content) {
       if (existing) {
         this.clearDraft(path)
         this.emit()
@@ -368,24 +369,31 @@ export class RepoSession {
    * Commit a structural change (create/rename/delete) with optimistic UI:
    * the tree updates immediately and rolls back if the commit fails.
    */
-  async applyOptimistic(changes: Change[], message: string): Promise<CommitResult> {
+  async applyOptimistic(changes: Change[], message: string, onApplied?: () => void): Promise<CommitResult> {
     const base = useRepo.getState().snapshot
     if (base) {
       const map = new Map(base.entries.map((e) => [e.path, e.sha]))
       for (const c of changes) {
         if (c.content === null) map.delete(c.path)
+        else if (typeof c.content === 'object') map.set(c.path, c.content.sha)
         else {
           const sha = await gitBlobSha(c.content)
           await this.cache.putBlob(sha, c.content)
           map.set(c.path, sha)
         }
       }
-      this.showSnapshot({ ...base, entries: [...map].map(([path, sha]) => ({ path, sha })) })
+      const optimistic = { ...base, entries: [...map].map(([path, sha]) => ({ path, sha })) }
+      this.showSnapshot(optimistic)
+      if (changes.some((c) => isMetaPath(c.path))) await this.loadMetas(optimistic)
     }
+    onApplied?.()
     try {
       return await this.commit(changes, message)
     } catch (e) {
-      if (this.remote) this.showSnapshot(this.remote)
+      if (this.remote) {
+        this.showSnapshot(this.remote)
+        await this.loadMetas(this.remote)
+      }
       throw e
     }
   }

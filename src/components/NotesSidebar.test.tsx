@@ -1,0 +1,191 @@
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { useUi } from '../store/ui.ts'
+import { setupFakeGitHub } from '../test/msw.ts'
+import { getEditorView, renderApp, typeInEditor } from '../test/renderApp.tsx'
+import { filterIcons } from './iconSearch.ts'
+
+const fake = setupFakeGitHub({
+  files: {
+    'Inbox.md': 'inbox',
+    'Work/Plan.md': 'plan',
+    'Work/Sub/Deep.md': 'deep',
+    'Work/_meta.json': '{}',
+  },
+})
+
+beforeEach(() => useUi.setState({ expanded: { Work: true } }))
+
+async function openMenu(name: string, role: 'link' | 'button' = 'link') {
+  const el = await screen.findByRole(role, { name: new RegExp(`^${name}`) })
+  fireEvent.contextMenu(el, { clientX: 10, clientY: 10 })
+  return screen.getByRole('menu')
+}
+
+async function answerPrompt(value: string, button: string) {
+  const dialog = await screen.findByRole('dialog')
+  const input = within(dialog).getByRole('textbox')
+  await userEvent.clear(input)
+  await userEvent.type(input, value)
+  await userEvent.click(within(dialog).getByRole('button', { name: button }))
+}
+
+describe('note & folder operations (T10)', () => {
+  it('creates a note in one commit and opens it', async () => {
+    renderApp('/')
+    await userEvent.click(await screen.findByRole('button', { name: 'New note' }))
+    await answerPrompt('Ideas', 'Create')
+    expect(await screen.findByRole('link', { name: /^Ideas/ })).toBeInTheDocument()
+    await waitFor(() => expect(fake.gh.files()['Ideas.md']).toBe(''))
+    expect(fake.gh.commitCount()).toBe(2)
+    await waitFor(() => expect(document.querySelector('.cm-editor')).not.toBeNull())
+  })
+
+  it('a new note can be edited right away without creating a conflict copy', async () => {
+    renderApp('/')
+    await userEvent.click(await screen.findByRole('button', { name: 'New note' }))
+    await answerPrompt('Fresh', 'Create')
+    await waitFor(() => expect(document.querySelector('.cm-editor')).not.toBeNull())
+    act(() => typeInEditor('hello'))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+    await waitFor(() => expect(fake.gh.files()['Fresh.md']).toBe('hello'))
+    expect(Object.keys(fake.gh.files()).some((p) => p.includes('conflict'))).toBe(false)
+  })
+
+  it('creates a folder with a _meta.json placeholder', async () => {
+    renderApp('/')
+    await userEvent.click(await screen.findByRole('button', { name: 'New folder' }))
+    await answerPrompt('Recipes', 'Create')
+    expect(await screen.findByRole('treeitem', { name: 'Recipes' })).toBeInTheDocument()
+    await waitFor(() => expect(fake.gh.files()['Recipes/_meta.json']).toBe('{}\n'))
+  })
+
+  it('rejects duplicate names with a clear message', async () => {
+    renderApp('/')
+    await userEvent.click(await screen.findByRole('button', { name: 'New note' }))
+    await answerPrompt('Inbox', 'Create')
+    expect(await screen.findByRole('alert')).toHaveTextContent('A note named "Inbox.md" already exists here.')
+    expect(fake.gh.commitCount()).toBe(1)
+  })
+
+  it('renames the open note via the context menu and follows it', async () => {
+    renderApp('/n/Inbox.md')
+    await waitFor(() => expect(getEditorView().state.doc.toString()).toBe('inbox'))
+    const menu = await openMenu('Inbox')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
+    await answerPrompt('Today', 'Rename')
+    await waitFor(() => expect(fake.gh.files()['Today.md']).toBe('inbox'))
+    expect(fake.gh.files()['Inbox.md']).toBeUndefined()
+    expect(fake.gh.commitCount()).toBe(2)
+    expect(await screen.findByRole('link', { name: /^Today/ })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('renames a folder with all its contents in a single commit', async () => {
+    renderApp('/')
+    const menu = await openMenu('Work', 'button')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
+    await answerPrompt('Job', 'Rename')
+    await waitFor(() =>
+      expect(Object.keys(fake.gh.files()).sort()).toEqual([
+        'Inbox.md',
+        'Job/Plan.md',
+        'Job/Sub/Deep.md',
+        'Job/_meta.json',
+      ]),
+    )
+    expect(fake.gh.commitCount()).toBe(2)
+    expect(screen.getByRole('treeitem', { name: 'Job' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('asks for confirmation before deleting', async () => {
+    renderApp('/')
+    let menu = await openMenu('Plan')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }))
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+    expect(fake.gh.files()['Work/Plan.md']).toBe('plan')
+
+    menu = await openMenu('Plan')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }))
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(fake.gh.files()['Work/Plan.md']).toBeUndefined())
+  })
+
+  it('deletes a folder in one commit', async () => {
+    renderApp('/')
+    const menu = await openMenu('Work', 'button')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('the 2 notes inside')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(Object.keys(fake.gh.files())).toEqual(['Inbox.md']))
+    expect(fake.gh.commitCount()).toBe(2)
+  })
+
+  it('rolls back the optimistic update when the commit fails', async () => {
+    renderApp('/')
+    fake.gh.failNext = (m) => (m === 'PATCH' ? { status: 500, body: { message: 'boom' } } : undefined)
+    const menu = await openMenu('Inbox')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
+    await answerPrompt('Gone', 'Rename')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not rename')
+    expect(screen.getByRole('link', { name: /^Inbox/ })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Gone/ })).not.toBeInTheDocument()
+  })
+
+  it('supports keyboard navigation in the context menu', async () => {
+    renderApp('/')
+    const menu = await openMenu('Work', 'button')
+    const items = within(menu).getAllByRole('menuitem')
+    expect(items.map((i) => i.textContent)).toEqual([
+      'New note',
+      'New folder',
+      'Rename',
+      'Change icon',
+      'Delete',
+    ])
+    expect(items[0]).toHaveFocus()
+    await userEvent.keyboard('{ArrowDown}')
+    expect(items[1]).toHaveFocus()
+    await userEvent.keyboard('{ArrowUp}{ArrowUp}')
+    expect(items[4]).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+})
+
+describe('folder icon picker (T11)', () => {
+  it('ranks icon search results', () => {
+    const names = ['book', 'book-open', 'notebook', 'facebook', 'briefcase', 'house']
+    expect(filterIcons(names, 'book')).toEqual(['book', 'book-open', 'facebook', 'notebook'])
+    expect(filterIcons(names, 'book open')).toEqual(['book-open'])
+    expect(filterIcons(names, 'zzz')).toEqual([])
+    expect(filterIcons(names, '', 2)).toEqual(['book', 'book-open'])
+  })
+
+  it('picks an icon, writes _meta.json and updates the sidebar', async () => {
+    renderApp('/')
+    const menu = await openMenu('Work', 'button')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
+    const search = await screen.findByRole('searchbox', { name: 'Search icons' })
+    await userEvent.type(search, 'briefcase')
+    const options = within(screen.getByRole('listbox', { name: 'Icons' })).getAllByRole('option')
+    expect(options[0]).toHaveAccessibleName('briefcase')
+    expect(options.every((o) => o.getAttribute('aria-label')!.includes('briefcase'))).toBe(true)
+    await userEvent.click(options[0]!)
+    await waitFor(() => expect(fake.gh.files()['Work/_meta.json']).toBe('{\n  "icon": "briefcase"\n}\n'))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('treeitem', { name: 'Work' }).querySelector('svg[data-icon="briefcase"]'),
+      ).not.toBeNull(),
+    )
+  })
+
+  it('removes an icon', async () => {
+    fake.gh.pushExternal({ 'Work/_meta.json': '{"icon":"star"}' })
+    renderApp('/')
+    const menu = await openMenu('Work', 'button')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove icon' }))
+    await waitFor(() => expect(fake.gh.files()['Work/_meta.json']).toBe('{}\n'))
+  })
+})
