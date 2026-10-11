@@ -1,6 +1,5 @@
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useRepo } from './repo/session.ts'
 import { setupFakeGitHub } from './test/msw.ts'
 import { getEditorView, pressKey, renderApp, typeInEditor } from './test/renderApp.tsx'
 import { loadSettings } from './settings/settings.ts'
@@ -52,8 +51,7 @@ describe('App: editing and saving (T6/T7)', () => {
     renderApp('/n/Inbox.md', { vim: false })
     await waitFor(() => expect(editorText()).toContain('Café'))
     act(() => typeInEditor('\nmore'))
-    await waitFor(() => expect(useRepo.getState().saveStatus).toBe('unsaved'))
-    expect(screen.getByRole('status', { name: 'Save status: Unsaved' })).toBeInTheDocument()
+    expect(await screen.findByRole('status', { name: 'Save status: Unsaved' })).toBeInTheDocument()
     act(() => pressKey('s', { ctrlKey: true }))
     await waitFor(() => expect(fake.gh.files()['Inbox.md']).toBe('# Inbox\n\nCafé ☕ and 🎉\nmore'))
     await waitFor(() =>
