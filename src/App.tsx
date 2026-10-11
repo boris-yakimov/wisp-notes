@@ -1,11 +1,14 @@
 import { AlertCircle, Settings as SettingsIcon } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate } from 'react-router'
 import { AppShell } from './components/AppShell.tsx'
 import { NotePage } from './components/NotePage.tsx'
 import { SettingsPage } from './components/SettingsPage.tsx'
 import { NotesSidebar } from './components/NotesSidebar.tsx'
 import { DialogHost } from './components/DialogHost.tsx'
+import { QuickOpen } from './components/QuickOpen.tsx'
+import { SearchService } from './search/service.ts'
+import { useUi } from './store/ui.ts'
 import { Notices, SaveStatus, StatusBar } from './components/StatusBar.tsx'
 import { SessionProvider } from './components/Workspace.tsx'
 import type { RepoSession } from './repo/session.ts'
@@ -52,8 +55,19 @@ export default function App() {
   )
 }
 
+function useSearchService(session: RepoSession): SearchService | null {
+  const [search, setSearch] = useState<SearchService | null>(null)
+  useEffect(() => {
+    const s = new SearchService(session)
+    setSearch(s) // eslint-disable-line react-hooks/set-state-in-effect -- owns an external resource
+    return () => s.dispose()
+  }, [session])
+  return search
+}
+
 function Connected({ session }: { session: RepoSession }) {
   useGlobalShortcuts(session)
+  const search = useSearchService(session)
   return (
     <>
       <AppShell
@@ -74,6 +88,7 @@ function Connected({ session }: { session: RepoSession }) {
       />
       <Notices />
       <DialogHost />
+      {search && <QuickOpen search={search} />}
     </>
   )
 }
@@ -85,10 +100,16 @@ function useGlobalShortcuts(session: RepoSession) {
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault()
         void session.saver.saveNow()
+      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        e.stopPropagation()
+        const ui = useUi.getState()
+        ui.setQuickOpen(!ui.quickOpen)
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Capture phase: runs before the editor's keymaps (vim, emacs-style Ctrl+K).
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [session])
 }
 

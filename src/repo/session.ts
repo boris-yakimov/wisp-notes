@@ -261,6 +261,11 @@ export class RepoSession {
     return this.drafts.has(path)
   }
 
+  /** Timestamp of the unsaved draft for a path, if any (changes on every edit). */
+  draftVersion(path: string): number | undefined {
+    return this.drafts.get(path)?.updatedAt
+  }
+
   /** Record an edit: persisted to IndexedDB immediately, committed by the auto-saver. */
   async editNote(path: string, content: string): Promise<void> {
     const existing = this.drafts.get(path)

@@ -28,6 +28,8 @@ export interface EditorProps {
   livePreviewEnabled: boolean
   readOnly?: boolean
   autoFocus?: boolean
+  /** Selected and scrolled into view on mount (search match). */
+  initialSelection?: { from: number; to: number }
 }
 
 /** onSave handler per view, so the global `:w` ex command can find the right editor. */
@@ -100,6 +102,14 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     })
     viewRef.current = view
     saveHandlers.set(view, () => propsRef.current.onSave?.())
+    if (p.initialSelection) {
+      const len = view.state.doc.length
+      const from = Math.min(p.initialSelection.from, len)
+      view.dispatch({
+        selection: { anchor: from, head: Math.min(p.initialSelection.to, len) },
+        effects: EditorView.scrollIntoView(from, { y: 'center' }),
+      })
+    }
     if (p.autoFocus) view.focus()
     return () => {
       view.destroy()

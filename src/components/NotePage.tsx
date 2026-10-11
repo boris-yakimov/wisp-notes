@@ -1,5 +1,5 @@
 import { AlertCircle, Loader2 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router'
 import type { EditorHandle } from '../editor/Editor.tsx'
 
@@ -69,12 +69,12 @@ function NoteView({ path }: { path: string }) {
     }
   }, [session, path, sha, exists, hasSnapshot])
 
-  // Highlight a search match once loaded.
-  useEffect(() => {
-    if (load.state !== 'ready' || !highlight) return
+  // Select a search match when opened from search.
+  const initialSelection = useMemo(() => {
+    if (load.state !== 'ready' || !highlight) return undefined
     const i = load.content.toLowerCase().indexOf(highlight.toLowerCase())
-    if (i >= 0) requestAnimationFrame(() => editor.current?.selectRange(i, i + highlight.length))
-  }, [load.state, highlight]) // eslint-disable-line react-hooks/exhaustive-deps
+    return i >= 0 ? { from: i, to: i + highlight.length } : undefined
+  }, [load, highlight])
 
   const onChange = useCallback((text: string) => void session.editNote(path, text), [session, path])
   const onSave = useCallback(() => void session.saver.saveNow(), [session])
@@ -102,7 +102,8 @@ function NoteView({ path }: { path: string }) {
             vimEnabled={settings.vim}
             livePreviewEnabled={settings.livePreview}
             readOnly={!exists}
-            autoFocus={!highlight}
+            autoFocus
+            initialSelection={initialSelection}
           />
         </Suspense>
       </div>
