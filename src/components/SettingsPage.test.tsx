@@ -3,9 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { SettingsPage } from './SettingsPage.tsx'
 import { useApp } from '../store/app.ts'
 import { defaultSettings, loadSettings } from '../settings/settings.ts'
-import { useFakeGitHub } from '../test/msw.ts'
+import { setupFakeGitHub } from '../test/msw.ts'
 
-const fake = useFakeGitHub({ files: { 'a.md': 'x' } })
+const fake = setupFakeGitHub({ files: { 'a.md': 'x' } })
 
 async function fill(token: string, repo = 'notes') {
   const user = userEvent.setup()

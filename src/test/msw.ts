@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node'
 import { FakeGitHub, type FakeGitHubOptions } from './fakeGitHub.ts'
 
 /** Start an MSW server backed by a fresh FakeGitHub for the current test file. */
-export function useFakeGitHub(opts: FakeGitHubOptions = {}) {
+export function setupFakeGitHub(opts: FakeGitHubOptions = {}) {
   const ref: { gh: FakeGitHub } = { gh: new FakeGitHub(opts) }
   const server = setupServer(
     http.all('https://api.github.com/*', async ({ request }) => {

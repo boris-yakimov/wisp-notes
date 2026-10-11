@@ -1,8 +1,8 @@
 import { GitHubClient, validateConnection } from './client.ts'
 import { base64ToUtf8, utf8ToBase64 } from './base64.ts'
-import { useFakeGitHub } from '../test/msw.ts'
+import { setupFakeGitHub } from '../test/msw.ts'
 
-const fake = useFakeGitHub({ files: { 'a.md': 'hello' } })
+const fake = setupFakeGitHub({ files: { 'a.md': 'hello' } })
 const cfg = { token: 'good-token', owner: 'me', repo: 'notes', branch: 'main' }
 
 describe('validateConnection', () => {
