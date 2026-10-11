@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 /**
  * In-memory fake of the subset of the GitHub REST API used by Wisp Notes.
  * Framework-agnostic: adapted to MSW (unit tests, see msw.ts) and to
@@ -32,6 +34,12 @@ export interface FakeGitHubOptions {
   canPush?: boolean
   /** Start with an empty repository (no commits). */
   empty?: boolean
+}
+
+/** Real git blob SHA-1, so client-side gitBlobSha() matches. */
+export function gitSha(content: string): string {
+  const body = Buffer.from(content, 'utf8')
+  return createHash('sha1').update(`blob ${body.length}\0`).update(body).digest('hex')
 }
 
 /** Deterministic 40-hex content hash (not real SHA-1, but content-addressed). */
@@ -93,7 +101,7 @@ export class FakeGitHub {
   }
 
   putBlob(content: string): string {
-    const sha = fakeSha('blob:' + content)
+    const sha = gitSha(content)
     this.blobs.set(sha, content)
     return sha
   }
