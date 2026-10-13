@@ -115,6 +115,9 @@ function Connected({ session }: { session: RepoSession }) {
 
 function useGlobalShortcuts(session: RepoSession) {
   useEffect(() => {
+    // Typed sequence for "\ff" outside text fields (inside the editor, vim normal mode handles it).
+    let seq = ''
+    let seqAt = 0
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.key.toLowerCase() === 's') {
@@ -125,10 +128,24 @@ function useGlobalShortcuts(session: RepoSession) {
         e.stopPropagation()
         const ui = useUi.getState()
         ui.setQuickOpen(!ui.quickOpen)
+      } else if (!mod && !e.altKey && e.key.length === 1 && !isTextField(e.target)) {
+        const now = Date.now()
+        seq = (now - seqAt < 1000 ? seq : '') + e.key
+        seqAt = now
+        if (seq.endsWith('\\ff')) {
+          seq = ''
+          e.preventDefault()
+          useUi.getState().setQuickOpen(true)
+        }
       }
     }
     // Capture phase: runs before the editor's keymaps (vim, emacs-style Ctrl+K).
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [session])
+}
+
+function isTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return target.isContentEditable || target.matches('input, textarea, select')
 }

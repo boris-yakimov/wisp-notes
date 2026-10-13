@@ -6,6 +6,7 @@ import { Compartment, EditorState, Transaction, type Extension } from '@codemirr
 import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view'
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { useUi } from '../store/ui.ts'
 import { livePreview } from './livePreview.ts'
 import { editorTheme, markdownHighlight } from './theme.ts'
 
@@ -41,6 +42,9 @@ function defineExCommands() {
   const save = (cm: { cm6: EditorView }) => saveHandlers.get(cm.cm6)?.()
   Vim.defineEx('write', 'w', save)
   Vim.defineEx('update', 'up', save)
+  // \ff in normal mode opens search (like a <leader>ff finder in nvim)
+  Vim.defineAction('openQuickOpen', () => useUi.getState().setQuickOpen(true))
+  Vim.mapCommand('\\ff', 'action', 'openQuickOpen', {}, { context: 'normal' })
 }
 
 const vimExt = (on: boolean): Extension => (on ? vim() : [])

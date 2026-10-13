@@ -147,3 +147,29 @@ test('drag a note into a folder', async ({ page, drive, isMobile }) => {
   expect(drive.files()['Inbox.md']).toBeUndefined()
   await expect(nav.getByRole('link', { name: /^Inbox/ })).toHaveAttribute('href', '/n/Home/Inbox.md')
 })
+
+test('vim \\ff opens search', async ({ page, drive, isMobile }) => {
+  void drive // installs the Drive mock
+  test.skip(isMobile, 'keyboard shortcut')
+  await signedIn(page)
+  await page.goto('/n/Inbox.md')
+  const editor = page.locator('.cm-content')
+  await expect(editor).toContainText('Things to sort.')
+  await editor.click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('vim-mode')).toHaveText(/normal/i)
+  await page.keyboard.type('\\ff')
+  await expect(page.getByRole('combobox', { name: 'Search notes' })).toBeFocused()
+  await expect(editor).toContainText('Things to sort.')
+})
+
+test('\\ff opens search when focus is outside the editor', async ({ page, drive, isMobile }) => {
+  void drive // installs the Drive mock
+  test.skip(isMobile, 'keyboard shortcut')
+  await signedIn(page)
+  await page.goto('/n/Inbox.md')
+  await expect(page.locator('.cm-content')).toContainText('Things to sort.')
+  await page.getByRole('navigation', { name: 'Notes' }).getByRole('link', { name: /^Inbox/ }).focus()
+  await page.keyboard.type('\\ff')
+  await expect(page.getByRole('combobox', { name: 'Search notes' })).toBeFocused()
+})
