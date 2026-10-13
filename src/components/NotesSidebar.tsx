@@ -6,6 +6,7 @@ import {
   ImageIcon,
   Pencil,
   Search,
+  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -36,6 +37,12 @@ export function NotesSidebar() {
   const onMove = useCallback((path: string, toFolder: string) => void move(path, toFolder), [move])
   const onRename = useCallback((node: FolderNode | NoteNode) => void rename(node), [rename])
 
+  const autoItem = (node: FolderNode | NoteNode): MenuItem => ({
+    label: 'Auto-assign icons',
+    icon: <Sparkles size={14} />,
+    onSelect: () => void actions.autoIcons(node),
+  })
+
   const items = (node: FolderNode | NoteNode): MenuItem[] => {
     if (node.kind === 'note') {
       return [
@@ -51,6 +58,7 @@ export function NotesSidebar() {
           icon: <ImageIcon size={14} />,
           onSelect: () => void actions.changeIcon(node),
         },
+        autoItem(node),
         {
           label: 'Delete',
           icon: <Trash2 size={14} />,
@@ -73,12 +81,13 @@ export function NotesSidebar() {
         onSelect: () => pickImport(node.path, 'folder'),
       },
     ]
-    if (node.path === '') return create
+    if (node.path === '') return [...create, autoItem(node)]
     return [
       ...create,
       { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => void actions.rename(node) },
       { label: 'Move to…', icon: <FolderOutput size={14} />, onSelect: () => void actions.moveTo(node) },
       { label: 'Change icon', icon: <ImageIcon size={14} />, onSelect: () => void actions.changeIcon(node) },
+      autoItem(node),
       {
         label: 'Delete',
         icon: <Trash2 size={14} />,

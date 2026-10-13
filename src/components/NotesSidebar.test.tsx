@@ -196,13 +196,14 @@ describe('note & folder operations (T10)', () => {
       'Rename',
       'Move to…',
       'Change icon',
+      'Auto-assign icons',
       'Delete',
     ])
     expect(items[0]).toHaveFocus()
     await userEvent.keyboard('{ArrowDown}')
     expect(items[1]).toHaveFocus()
     await userEvent.keyboard('{ArrowUp}{ArrowUp}')
-    expect(items[7]).toHaveFocus()
+    expect(items[8]).toHaveFocus() // wraps to the last item
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
@@ -301,6 +302,52 @@ describe('uploaded icons', () => {
     await new Promise((r) => setTimeout(r, 50))
     expect(inbox.querySelector('img')).toBeNull()
     expect(inbox.querySelector('svg[data-icon]')).toHaveAttribute('data-icon', 'note')
+  })
+})
+
+describe('auto-assign icons', () => {
+  beforeEach(() => {
+    fake.drive.write('DevOps/Docker.md', 'd')
+    fake.drive.write('DevOps/Kubernetes.md', 'k')
+    fake.drive.write('DevOps/Groceries.md', 'g')
+    fake.drive.write('DevOps/_meta.json', JSON.stringify({ notes: { 'Kubernetes.md': 'star' } }))
+  })
+
+  it('previews the icons, then saves them without touching existing ones', async () => {
+    useUi.setState({ expanded: { DevOps: true } })
+    renderApp('/')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('treeitem', { name: 'Kubernetes' }).querySelector('[data-icon="star"]'),
+      ).not.toBeNull(),
+    )
+    const menu = await openMenu('DevOps', 'button')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Auto-assign icons' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Auto-assign icons' })
+    expect(dialog).toHaveTextContent('Set icons for 1 item in “DevOps”')
+    expect(
+      within(within(dialog).getByRole('list', { name: 'Changes' }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Dockercontainer'])
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Set icons' }))
+    await waitFor(() =>
+      expect(JSON.parse(fake.drive.files()['DevOps/_meta.json']!)).toEqual({
+        notes: { 'Kubernetes.md': 'star', 'Docker.md': 'container' },
+      }),
+    )
+    expect(await screen.findByText('Set 1 icon.')).toBeInTheDocument()
+  })
+
+  it('cancelling saves nothing', async () => {
+    renderApp('/')
+    const menu = await openMenu('DevOps', 'button')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Auto-assign icons' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Auto-assign icons' })
+    const before = fake.drive.writeCount()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fake.drive.writeCount()).toBe(before)
   })
 })
 

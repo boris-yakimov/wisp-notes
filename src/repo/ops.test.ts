@@ -11,7 +11,9 @@ import {
   renameFolderOp,
   renameNoteOp,
   setFolderIconOp,
+  setIconsOp,
   setNoteIconOp,
+  suggestIcons,
 } from './ops.ts'
 
 const f = (path: string): Entry => ({ path, id: path, folder: false, md5: 'h' })
@@ -224,6 +226,52 @@ describe('operation builders', () => {
       const deleted = deleteNoteOp('Work/Plan.md', entries, metas)
       expect(meta(deleted, 1)).toEqual(['Work/_meta.json', { icon: 'briefcase' }])
       expect(moveOp('Inbox.md', 'Home', entries, metas).ops).toHaveLength(1) // no icon: no meta write
+    })
+  })
+
+  describe('auto-assign icons', () => {
+    const tree: Entry[] = [
+      d('DevOps'),
+      f('DevOps/Docker.md'),
+      f('DevOps/Kubernetes.md'),
+      d('DevOps/Kubernetes'), // sub-notes of Kubernetes.md
+      f('DevOps/Kubernetes/Helm.md'),
+      d('DevOps/AWS'),
+      f('DevOps/AWS/IAM.md'),
+      f('DevOps/Random.md'),
+      f('DevOps/pic.png'),
+      f('Inbox.md'),
+    ]
+    const guess = (t: string) =>
+      ({ Docker: 'container', Kubernetes: 'ship-wheel', Helm: 'ship-wheel', AWS: 'cloud', IAM: 'shield' })[t]
+
+    it('suggests icons inside the folder for items without one, skipping sub-note folders', () => {
+      const metas = { DevOps: { notes: { 'Docker.md': 'star' } } }
+      expect(suggestIcons('DevOps', tree, metas, guess)).toEqual([
+        { path: 'DevOps/AWS', folder: true, icon: 'cloud' },
+        { path: 'DevOps/AWS/IAM.md', folder: false, icon: 'shield' },
+        { path: 'DevOps/Kubernetes.md', folder: false, icon: 'ship-wheel' },
+        { path: 'DevOps/Kubernetes/Helm.md', folder: false, icon: 'ship-wheel' },
+      ])
+      expect(suggestIcons('DevOps/Kubernetes', tree, {}, guess).map((s) => s.path)).toEqual([
+        'DevOps/Kubernetes/Helm.md',
+      ])
+    })
+
+    it('writes one _meta.json per folder, keeping existing meta', () => {
+      const metas = { DevOps: { icon: 'infinity', notes: { 'Docker.md': 'star' } } }
+      const op = setIconsOp(suggestIcons('DevOps', tree, metas, guess), metas)
+      const written = Object.fromEntries(
+        op.ops.map((o) => [o.path, JSON.parse((o as { content: string }).content) as unknown]),
+      )
+      expect(written).toEqual({
+        'DevOps/_meta.json': {
+          icon: 'infinity',
+          notes: { 'Docker.md': 'star', 'Kubernetes.md': 'ship-wheel' },
+        },
+        'DevOps/AWS/_meta.json': { icon: 'cloud', notes: { 'IAM.md': 'shield' } },
+        'DevOps/Kubernetes/_meta.json': { notes: { 'Helm.md': 'ship-wheel' } },
+      })
     })
   })
 })

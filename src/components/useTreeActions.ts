@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router'
+import { suggestIcon } from '../repo/autoIcons.ts'
 import { childFolderOf, isInside, noteTitle, notePathToUrl } from '../repo/paths.ts'
 import {
   countNotes,
@@ -13,7 +14,9 @@ import {
   renameFolderOp,
   renameNoteOp,
   setFolderIconOp,
+  setIconsOp,
   setNoteIconOp,
+  suggestIcons,
   type ImportFile,
   type Op,
 } from '../repo/ops.ts'
@@ -220,6 +223,40 @@ export function useTreeActions() {
     [run],
   )
 
+  /**
+   * Guess icons from names for everything inside a folder (or a note's sub-notes) that has none yet.
+   * Shows the proposed icons and only saves after confirmation; existing icons are never changed.
+   */
+  const autoIcons = useCallback(
+    async (node: FolderNode | NoteNode) => {
+      const scope = node.kind === 'note' ? childFolderOf(node.path) : node.path
+      const suggestions = suggestIcons(scope, entries(), metas(), suggestIcon)
+      const where = node.path ? `“${node.name}”` : 'your notes'
+      if (!suggestions.length) {
+        notify(`No icons to add in ${where}: every item already has one or no match was found.`)
+        return
+      }
+      const n = suggestions.length
+      const ok = await confirmDialog({
+        title: 'Auto-assign icons',
+        message: `Set icons for ${n} item${n === 1 ? '' : 's'} in ${where}. Items that already have an icon are left alone.`,
+        items: suggestions.map((s) => ({
+          icon: s.icon,
+          label: (scope ? s.path.slice(scope.length + 1) : s.path)
+            .replace(/\.md$/i, '')
+            .split('/')
+            .join(' / '),
+          detail: s.icon,
+        })),
+        confirmLabel: 'Set icons',
+      })
+      if (!ok) return
+      if (await run(() => setIconsOp(suggestions, metas()), 'set the icons'))
+        notify(`Set ${n} icon${n === 1 ? '' : 's'}.`)
+    },
+    [run],
+  )
+
   /** Upload local files (keeping folder structure) into a folder. */
   const importFiles = useCallback(
     async (folder: string, files: ImportFile[]) => {
@@ -236,5 +273,5 @@ export function useTreeActions() {
     [session, setExpanded],
   )
 
-  return { newNote, newFolder, rename, remove, move, moveTo, changeIcon, importFiles }
+  return { newNote, newFolder, rename, remove, move, moveTo, changeIcon, autoIcons, importFiles }
 }

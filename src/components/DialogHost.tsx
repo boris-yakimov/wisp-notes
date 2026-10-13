@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useDialog, type DialogRequest } from '../store/dialog.ts'
+import { FolderIcon } from './FolderIcon.tsx'
 
 // The icon picker includes the searchable list of all Lucide icons: load on demand.
 const IconPicker = lazy(() => import('./IconPicker.tsx'))
@@ -25,6 +26,23 @@ function DialogView({ req }: { req: DialogRequest }) {
       {req.kind === 'confirm' && (
         <>
           <p className="mb-4 text-sm text-neutral-700">{req.message}</p>
+          {req.items && (
+            <ul
+              aria-label="Changes"
+              className="-mt-2 mb-4 max-h-72 overflow-y-auto rounded border border-neutral-200 text-sm"
+            >
+              {req.items.map((it, i) => (
+                <li
+                  key={i}
+                  className="flex items-center gap-2 border-b border-neutral-100 px-2 py-1.5 last:border-b-0"
+                >
+                  <FolderIcon name={it.icon} note size={16} className="shrink-0 text-neutral-600" />
+                  <span className="flex-1 truncate">{it.label}</span>
+                  {it.detail && <span className="shrink-0 text-xs text-neutral-500">{it.detail}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="flex justify-end gap-2">
             <button type="button" className={`${btn} hover:bg-neutral-100`} onClick={cancel}>
               Cancel

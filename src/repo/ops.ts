@@ -282,3 +282,44 @@ export function importOp(folder: string, files: ImportFile[], entries: Entry[]):
   }
   return { ops, target: folder }
 }
+
+export interface IconSuggestion {
+  path: string
+  /** Folder (icon in its own `_meta.json`) or note (icon in its folder's `_meta.json`). */
+  folder: boolean
+  icon: string
+}
+
+/**
+ * Icons for every note and subfolder inside `folder` (recursively) that has no icon yet,
+ * guessed from its name. Folders holding a note's sub-notes are skipped: the note carries the icon.
+ */
+export function suggestIcons(
+  folder: string,
+  entries: Entry[],
+  metas: Metas,
+  suggest: (title: string) => string | undefined,
+): IconSuggestion[] {
+  const notes = new Set(entries.filter((e) => !e.folder && isNotePath(e.path)).map((e) => e.path))
+  const out: IconSuggestion[] = []
+  for (const e of entries) {
+    if (e.path === folder || !isInside(e.path, folder) || basename(e.path).startsWith('.')) continue
+    if (e.folder) {
+      if (notes.has(e.path + NOTE_EXT) || metas[e.path]?.icon) continue
+    } else if (!isNotePath(e.path) || metas[dirname(e.path)]?.notes?.[basename(e.path)]) continue
+    const icon = suggest(noteTitle(e.path))
+    if (icon) out.push({ path: e.path, folder: e.folder, icon })
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
+/** One `_meta.json` write per affected folder. */
+export function setIconsOp(suggestions: IconSuggestion[], metas: Metas): Op {
+  const next = new Map<string, FolderMeta>()
+  const get = (f: string) => next.get(f) ?? { ...metas[f] }
+  for (const s of suggestions) {
+    if (s.folder) next.set(s.path, { ...get(s.path), icon: s.icon })
+    else next.set(dirname(s.path), withNoteIcon(get(dirname(s.path)), basename(s.path), s.icon))
+  }
+  return { ops: [...next].map(([f, meta]) => writeMeta(f, meta)) }
+}

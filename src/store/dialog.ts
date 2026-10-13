@@ -15,6 +15,8 @@ export type DialogRequest =
       kind: 'confirm'
       title: string
       message: string
+      /** Optional list shown under the message (e.g. proposed icons). */
+      items?: { icon?: string; label: string; detail?: string }[]
       confirmLabel: string
       danger: boolean
       resolve: (ok: boolean) => void
@@ -66,6 +68,7 @@ export function promptDialog(opts: {
 export function confirmDialog(opts: {
   title: string
   message: string
+  items?: { icon?: string; label: string; detail?: string }[]
   confirmLabel?: string
   danger?: boolean
 }) {
@@ -73,6 +76,7 @@ export function confirmDialog(opts: {
     kind: 'confirm',
     title: opts.title,
     message: opts.message,
+    ...(opts.items ? { items: opts.items } : {}),
     confirmLabel: opts.confirmLabel ?? 'OK',
     danger: opts.danger ?? false,
     resolve,

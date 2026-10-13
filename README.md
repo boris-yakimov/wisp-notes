@@ -22,7 +22,8 @@ Notes can have sub-notes, like Notion pages: use **+** on a note row (or **New s
 a note onto another note. Sub-notes of `Plan.md` live in a `Plan/` folder next to it, the same layout as a
 Notion export, so imported Notion pages show up nested.
 
-Folders and notes can have icons: **Change icon** in their menu, then pick one or **Upload image…** your own.
+Folders and notes can have icons: **Change icon** in their menu, then pick one or **Upload image…** your own. **Auto-assign icons** on a folder guesses icons from names (Docker, Kubernetes, AWS, …)
+for everything inside that has none yet, shows them, and saves after you confirm.
 
 Shortcuts: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now. Vim mode and live preview can be toggled in Settings.
 
