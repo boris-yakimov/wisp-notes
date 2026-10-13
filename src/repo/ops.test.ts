@@ -1,104 +1,96 @@
+import type { Entry } from '../drive/remoteTree.ts'
 import {
   countNotes,
   createFolderOp,
   createNoteOp,
   deleteFolderOp,
   deleteNoteOp,
+  importOp,
   renameFolderOp,
   renameNoteOp,
   setFolderIconOp,
 } from './ops.ts'
 
-const entries = [
-  { path: 'Inbox.md', sha: 's-inbox' },
-  { path: 'Work/_meta.json', sha: 's-meta' },
-  { path: 'Work/Plan.md', sha: 's-plan' },
-  { path: 'Work/Sub/Deep.md', sha: 's-deep' },
-  { path: 'Work/Sub/pic.png', sha: 's-pic' },
-  { path: 'Home/Food.md', sha: 's-food' },
+const f = (path: string): Entry => ({ path, id: path, folder: false, md5: 'h' })
+const d = (path: string): Entry => ({ path, id: path, folder: true })
+const entries: Entry[] = [
+  f('Inbox.md'),
+  d('Work'),
+  f('Work/_meta.json'),
+  f('Work/Plan.md'),
+  d('Work/Sub'),
+  f('Work/Sub/Deep.md'),
+  f('Work/Sub/pic.png'),
+  d('Home'),
+  f('Home/Food.md'),
 ]
-const exists = (p: string) => entries.some((e) => e.path === p)
 
-describe('change-set builders', () => {
+describe('operation builders', () => {
   it('createNoteOp adds .md and rejects duplicates and bad names', () => {
-    expect(createNoteOp('Work', 'Ideas', exists)).toEqual({
-      changes: [{ path: 'Work/Ideas.md', content: '' }],
-      message: 'Create Work/Ideas.md',
+    expect(createNoteOp('Work', 'Ideas', entries)).toEqual({
+      ops: [{ kind: 'write', path: 'Work/Ideas.md', content: '', base: null }],
       target: 'Work/Ideas.md',
     })
-    expect(createNoteOp('', 'x.md', exists).target).toBe('x.md')
-    expect(() => createNoteOp('Work', 'Plan', exists)).toThrow('already exists')
-    expect(() => createNoteOp('', 'a/b', exists)).toThrow('slashes')
+    expect(createNoteOp('', 'x.md', entries).target).toBe('x.md')
+    expect(() => createNoteOp('Work', 'plan', entries)).toThrow('already exists')
+    expect(() => createNoteOp('', 'a/b', entries)).toThrow('slashes')
   })
 
-  it('createFolderOp writes a _meta.json placeholder', () => {
-    expect(createFolderOp('Work', 'Ideas', entries).changes).toEqual([
-      { path: 'Work/Ideas/_meta.json', content: '{}\n' },
-    ])
+  it('createFolderOp creates a real (empty) folder', () => {
+    expect(createFolderOp('Work', 'Ideas', entries).ops).toEqual([{ kind: 'mkdir', path: 'Work/Ideas' }])
     expect(() => createFolderOp('', 'Home', entries)).toThrow('already exists')
   })
 
-  it('renameNoteOp deletes the old path and reuses the blob', () => {
+  it('renameNoteOp is a single rename', () => {
     const op = renameNoteOp('Work/Plan.md', 'Roadmap', entries)
-    expect(op.changes).toEqual([
-      { path: 'Work/Plan.md', content: null, baseSha: 's-plan' },
-      { path: 'Work/Roadmap.md', content: { sha: 's-plan' }, baseSha: null },
-    ])
+    expect(op.ops).toEqual([{ kind: 'rename', path: 'Work/Plan.md', to: 'Work/Roadmap.md' }])
     expect(op.moved).toEqual({ 'Work/Plan.md': 'Work/Roadmap.md' })
-    expect(renameNoteOp('Work/Plan.md', 'Plan', entries).changes).toEqual([])
-    expect(
-      () => renameNoteOp('Inbox.md', 'Inbox', [...entries, { path: 'x.md', sha: '1' }]).changes,
-    ).not.toThrow()
-    expect(() => renameNoteOp('Work/Plan.md', 'Plan.md', entries)).not.toThrow()
+    expect(renameNoteOp('Work/Plan.md', 'Plan', entries).ops).toEqual([])
+    expect(renameNoteOp('Work/Plan.md', 'plan', entries).ops).toHaveLength(1) // case-only
+    expect(() => renameNoteOp('Inbox.md', 'Food', [...entries, f('Food.md')])).toThrow('already exists')
   })
 
-  it('renameNoteOp rejects collisions', () => {
-    expect(() => renameNoteOp('Inbox.md', 'Inbox2', [...entries, { path: 'Inbox2.md', sha: 'z' }])).toThrow(
-      'already exists',
+  it('renameFolderOp is one rename and reports moved notes', () => {
+    const op = renameFolderOp('Work', 'Job', entries)
+    expect(op.ops).toEqual([{ kind: 'rename', path: 'Work', to: 'Job' }])
+    expect(op.moved).toMatchObject({ 'Work/Plan.md': 'Job/Plan.md', 'Work/Sub/Deep.md': 'Job/Sub/Deep.md' })
+    expect(() => renameFolderOp('Work', 'Home', entries)).toThrow('already exists')
+  })
+
+  it('delete ops trash the item', () => {
+    expect(deleteNoteOp('Inbox.md', entries).ops).toEqual([{ kind: 'trash', path: 'Inbox.md' }])
+    expect(deleteFolderOp('Work', entries).ops).toEqual([{ kind: 'trash', path: 'Work' }])
+    expect(countNotes('Work', entries)).toBe(2)
+    expect(() => deleteFolderOp('Inbox.md', entries)).toThrow('no longer exists')
+  })
+
+  it('setFolderIconOp writes _meta.json, keeping other meta', () => {
+    expect(setFolderIconOp('Work', 'briefcase', {}).ops).toEqual([
+      { kind: 'write', path: 'Work/_meta.json', content: '{\n  "icon": "briefcase"\n}\n' },
+    ])
+    expect((setFolderIconOp('Work', undefined, { icon: 'x' }).ops[0] as { content: string }).content).toBe(
+      '{}\n',
     )
   })
 
-  it('deleteNoteOp', () => {
-    expect(deleteNoteOp('Inbox.md', entries).changes).toEqual([
-      { path: 'Inbox.md', content: null, baseSha: 's-inbox' },
+  it('importOp keeps structure, skips hidden files and resolves clashes', () => {
+    const op = importOp(
+      '',
+      [
+        { relativePath: 'Export/Plan.md', content: 'a' },
+        { relativePath: 'Export/img/shot.png', content: new Blob(['x']) },
+        { relativePath: 'Export/.DS_Store', content: 'x' },
+        { relativePath: 'Inbox.md', content: 'b' },
+        { relativePath: 'Work/Plan.md', content: 'c' },
+      ],
+      entries,
+    )
+    expect(op.ops.map((o) => o.path)).toEqual([
+      'Export/Plan.md',
+      'Export/img/shot.png',
+      'Inbox (2).md',
+      'Work (2)/Plan.md',
     ])
-  })
-
-  it('renameFolderOp moves every file (including non-notes and meta) in one change set', () => {
-    const op = renameFolderOp('Work', 'Job', entries)
-    expect(op.changes).toHaveLength(8)
-    expect(op.moved).toEqual({
-      'Work/_meta.json': 'Job/_meta.json',
-      'Work/Plan.md': 'Job/Plan.md',
-      'Work/Sub/Deep.md': 'Job/Sub/Deep.md',
-      'Work/Sub/pic.png': 'Job/Sub/pic.png',
-    })
-    expect(op.changes.filter((c) => c.content === null).map((c) => c.path)).toEqual(Object.keys(op.moved!))
-    expect(() => renameFolderOp('Work', 'Home', entries)).toThrow('already exists')
-    expect(renameFolderOp('Work/Sub', 'Deeper', entries).target).toBe('Work/Deeper')
-  })
-
-  it('deleteFolderOp deletes everything inside', () => {
-    const op = deleteFolderOp('Work', entries)
-    expect(op.changes.map((c) => c.path)).toEqual([
-      'Work/_meta.json',
-      'Work/Plan.md',
-      'Work/Sub/Deep.md',
-      'Work/Sub/pic.png',
-    ])
-    expect(op.changes.every((c) => c.content === null)).toBe(true)
-    expect(countNotes('Work', entries)).toBe(2)
-  })
-
-  it('does not treat "Workshop" as inside "Work"', () => {
-    const e = [...entries, { path: 'Workshop/a.md', sha: 'w' }]
-    expect(deleteFolderOp('Work', e).changes.map((c) => c.path)).not.toContain('Workshop/a.md')
-  })
-
-  it('setFolderIconOp writes or removes the icon, keeping other meta', () => {
-    expect(setFolderIconOp('Work', 'briefcase', {}).changes).toEqual([
-      { path: 'Work/_meta.json', content: '{\n  "icon": "briefcase"\n}\n' },
-    ])
-    expect(setFolderIconOp('Work', undefined, { icon: 'x' }).changes[0]!.content).toBe('{}\n')
+    expect(op.ops.every((o) => o.kind === 'write' && o.base === null)).toBe(true)
   })
 })

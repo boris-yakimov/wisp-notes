@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Page } from '@playwright/test'
 import { expect, test } from './fixtures.ts'
 
@@ -9,15 +12,26 @@ async function ensureSidebar(page: Page) {
   return nav
 }
 
-test('connect → browse → edit → auto-save → rename → search', async ({ page, gh, isMobile }) => {
-  // Connect
+/** Pre-signed-in state: account + valid token in localStorage. */
+async function signedIn(page: Page, vim = true) {
+  await page.addInitScript((vim) => {
+    if (localStorage.getItem('wisp-notes:settings')) return
+    localStorage.setItem(
+      'wisp-notes:settings',
+      JSON.stringify({ account: { email: 'me@example.com', name: 'Me' }, vim, livePreview: true }),
+    )
+    localStorage.setItem(
+      'wisp-notes:token',
+      JSON.stringify({ token: 'good-token', expiresAt: Date.now() + 3_600_000 }),
+    )
+  }, vim)
+}
+
+test('sign in → browse → edit → auto-save → rename → search', async ({ page, drive, isMobile }) => {
+  // Sign in with Google
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Connect to GitHub' })).toBeVisible()
-  await page.getByLabel('Personal access token').fill('good-token')
-  await page.getByLabel('Owner').fill('me')
-  await page.getByLabel('Repository').fill('notes')
-  await page.getByRole('button', { name: 'Connect' }).click()
-  await expect(page.getByText('Connected to me/notes')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await page.getByRole('button', { name: 'Sign in with Google' }).click()
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByText(/Select a note|Loading notes/)).toBeVisible()
 
@@ -31,10 +45,9 @@ test('connect → browse → edit → auto-save → rename → search', async ({
   if (isMobile) await expect(nav).toBeHidden() // drawer closes after navigating
   const editor = page.locator('.cm-content')
   await expect(editor).toContainText('Ship Wisp Notes this week.')
-  // Live preview: the bold markers are hidden off the cursor line, a checkbox is rendered
-  await expect(page.locator('.cm-lp-task')).toHaveCount(1)
+  await expect(page.locator('.cm-lp-task')).toHaveCount(1) // live preview checkbox
 
-  // Edit with vim (on by default): go to end of document, open a new line, type
+  // Edit with vim (on by default): end of document, new line, type
   await expect(page.getByTestId('vim-mode')).toHaveText(/normal/i)
   await editor.click()
   await page.keyboard.press('Escape')
@@ -46,8 +59,7 @@ test('connect → browse → edit → auto-save → rename → search', async ({
 
   // Auto-save after ~3s idle
   await expect(page.getByRole('status', { name: 'Save status: Saved' })).toBeVisible({ timeout: 10_000 })
-  expect(gh.files()['Work/Plan.md']).toContain('Added from the browser 🎉')
-  expect(gh.commitCount()).toBe(2)
+  expect(drive.files()['Work/Plan.md']).toContain('Added from the browser 🎉')
 
   // Rename the open note via its actions menu
   nav = await ensureSidebar(page)
@@ -57,9 +69,8 @@ test('connect → browse → edit → auto-save → rename → search', async ({
   await dialog.getByLabel('New name').fill('Roadmap')
   await dialog.getByRole('button', { name: 'Rename' }).click()
   await expect(page).toHaveURL(/\/n\/Work\/Roadmap\.md$/)
-  await expect.poll(() => gh.files()['Work/Roadmap.md']).toContain('Added from the browser')
-  expect(gh.files()['Work/Plan.md']).toBeUndefined()
-  expect(gh.commitCount()).toBe(3)
+  await expect.poll(() => drive.files()['Work/Roadmap.md']).toContain('Added from the browser')
+  expect(drive.files()['Work/Plan.md']).toBeUndefined()
 
   // Search (content match) and jump to the note with the match selected
   await page.goto('/') // fresh load: cached tree + background prefetch
@@ -82,23 +93,45 @@ test('connect → browse → edit → auto-save → rename → search', async ({
   expect(await page.evaluate(() => window.getSelection()?.toString())).toMatch(/pancakes/i)
 })
 
-test('works offline from the cache and shows the offline status', async ({ page, gh }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'wisp-notes:settings',
-      JSON.stringify({
-        token: 'good-token',
-        owner: 'me',
-        repo: 'notes',
-        branch: 'main',
-        vim: false,
-        livePreview: true,
-      }),
-    )
-  })
+test('shows the latest content from another device when returning to the tab', async ({ page, drive }) => {
+  await signedIn(page, false)
+  await page.goto('/n/Inbox.md')
+  const editor = page.locator('.cm-content')
+  await expect(editor).toContainText('Things to sort.')
+  drive.write('Inbox.md', '# Inbox\n\nEdited on my laptop.')
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(editor).toContainText('Edited on my laptop.')
+})
+
+test('imports a folder (Markdown + screenshots)', async ({ page, drive, isMobile }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'wisp-import-'))
+  const exp = join(dir, 'Notion Export')
+  mkdirSync(join(exp, 'img'), { recursive: true })
+  writeFileSync(join(exp, 'Meeting notes.md'), '# Meeting\n\nSee screenshot.')
+  writeFileSync(join(exp, 'img', 'shot.png'), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  try {
+    await signedIn(page)
+    await page.goto('/')
+    const nav = await ensureSidebar(page)
+    const chooser = page.waitForEvent('filechooser')
+    await nav.getByRole('button', { name: 'Import folder' }).click()
+    await (await chooser).setFiles(exp)
+    await expect(page.getByText('Imported 2 files.')).toBeVisible({ timeout: 10_000 })
+    expect(drive.files()['Notion Export/Meeting notes.md']).toBe('# Meeting\n\nSee screenshot.')
+    expect([...drive.bytes('Notion Export/img/shot.png')!]).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
+    if (isMobile) await ensureSidebar(page)
+    await nav.getByRole('button', { name: /^Notion Export/ }).click()
+    await expect(nav.getByRole('link', { name: /^Meeting notes/ })).toBeVisible()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('works offline from the cache and shows the offline status', async ({ page, drive }) => {
+  await signedIn(page, false)
   await page.goto('/n/Inbox.md')
   await expect(page.locator('.cm-content')).toContainText('Things to sort.')
-  gh.offline = true
+  drive.offline = true
   await page.reload()
   await expect(page.locator('.cm-content')).toContainText('Things to sort.')
   await expect(page.getByRole('status', { name: 'Save status: Offline' })).toBeVisible()

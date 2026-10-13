@@ -10,7 +10,7 @@ import { DialogHost } from './components/DialogHost.tsx'
 import { QuickOpen } from './components/QuickOpen.tsx'
 import { SearchService } from './search/service.ts'
 import { useUi } from './store/ui.ts'
-import { Notices, SaveStatus, StatusBar } from './components/StatusBar.tsx'
+import { AuthBanner, ImportProgress, Notices, SaveStatus, StatusBar } from './components/StatusBar.tsx'
 import { SessionProvider } from './components/Workspace.tsx'
 import type { RepoSession } from './repo/session.ts'
 import { isConfigured } from './settings/settings.ts'
@@ -27,6 +27,7 @@ function SettingsLink() {
 }
 
 export default function App() {
+  const account = useApp((s) => s.settings.account)
   const configured = useApp((s) => isConfigured(s.settings))
   const navigate = useNavigate()
   return (
@@ -43,15 +44,22 @@ export default function App() {
                 </Link>
               ) : null
             }
-            main={<SettingsPage onConnected={() => setTimeout(() => navigate('/'), 600)} />}
+            main={
+              <>
+                <SettingsPage onConnected={() => navigate('/')} />
+                <DialogHost />
+              </>
+            }
           />
         }
       />
       <Route
         path="*"
         element={
-          configured ? (
-            <SessionProvider>{(s) => <Connected session={s} />}</SessionProvider>
+          account ? (
+            <SessionProvider key={account.email} account={account}>
+              {(s) => <Connected session={s} />}
+            </SessionProvider>
           ) : (
             <Navigate to="/settings" replace />
           )
@@ -85,14 +93,20 @@ function Connected({ session }: { session: RepoSession }) {
           </>
         }
         main={
-          <Routes>
-            <Route path="/n/*" element={<NotePage />} />
-            <Route path="*" element={<Home />} />
-          </Routes>
+          <div className="flex h-full flex-col">
+            <AuthBanner />
+            <div className="min-h-0 flex-1">
+              <Routes>
+                <Route path="/n/*" element={<NotePage />} />
+                <Route path="*" element={<Home />} />
+              </Routes>
+            </div>
+          </div>
         }
         statusBar={<StatusBar />}
       />
       <Notices />
+      <ImportProgress />
       <DialogHost />
       {search && <QuickOpen search={search} />}
     </>

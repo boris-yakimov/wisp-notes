@@ -1,17 +1,23 @@
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { FakeGitHub, type FakeGitHubOptions } from './fakeGitHub.ts'
+import { FakeDrive, type FakeDriveOptions } from './fakeDrive.ts'
 
-/** Start an MSW server backed by a fresh FakeGitHub for the current test file. */
-export function setupFakeGitHub(opts: FakeGitHubOptions = {}) {
-  const ref: { gh: FakeGitHub } = { gh: new FakeGitHub(opts) }
+/** Start an MSW server backed by a fresh FakeDrive (per test) for the current test file. */
+export function setupFakeDrive(opts: FakeDriveOptions = {}) {
+  const ref: { drive: FakeDrive } = { drive: new FakeDrive(opts) }
   const server = setupServer(
-    http.all('https://api.github.com/*', async ({ request }) => {
+    http.all('https://www.googleapis.com/*', async ({ request }) => {
       const headers: Record<string, string> = {}
       request.headers.forEach((v, k) => (headers[k.toLowerCase()] = v))
-      const text = request.method === 'GET' ? '' : await request.text()
+      const body = request.method === 'GET' ? undefined : new Uint8Array(await request.arrayBuffer())
       try {
-        const res = ref.gh.handle(request.method, request.url, headers, text ? JSON.parse(text) : undefined)
+        const res = ref.drive.handle(request.method, request.url, headers, body)
+        if (res.raw) {
+          return new HttpResponse(res.raw.slice().buffer, {
+            status: res.status,
+            headers: { 'content-type': res.contentType ?? 'application/octet-stream' },
+          })
+        }
         return HttpResponse.json(res.body as object, { status: res.status })
       } catch {
         return HttpResponse.error()
@@ -20,7 +26,7 @@ export function setupFakeGitHub(opts: FakeGitHubOptions = {}) {
   )
   beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
   beforeEach(() => {
-    ref.gh = new FakeGitHub(opts)
+    ref.drive = new FakeDrive(opts)
   })
   afterAll(() => server.close())
   return ref

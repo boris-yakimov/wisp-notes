@@ -6,7 +6,7 @@ import { SearchIndex, type NoteSource } from './index.ts'
 /**
  * Keeps a SearchIndex in sync with a RepoSession: background-prefetches all note blobs
  * into the cache (limited concurrency) and re-indexes incrementally on every change
- * (snapshot updates, drafts, commits). Works offline from the cache.
+ * (Drive syncs, drafts, saves). Works offline from the cache.
  */
 export class SearchService {
   readonly index = new SearchIndex()
@@ -64,7 +64,8 @@ export class SearchService {
         for (const e of entries) {
           if (!isNotePath(e.path)) continue
           const draft = this.session.draftVersion(e.path)
-          const version = draft !== undefined ? `draft:${draft}` : e.sha
+          if (e.folder) continue
+          const version = draft !== undefined ? `draft:${draft}` : (e.md5 ?? e.id)
           // Skip reading content that is already indexed at this version.
           if (this.index.isCurrent(e.path, version)) {
             notes.push({ path: e.path, version, content: '' })

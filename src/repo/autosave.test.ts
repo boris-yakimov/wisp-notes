@@ -1,5 +1,5 @@
 import { AutoSaver } from './autosave.ts'
-import { GitHubError } from '../github/errors.ts'
+import { DriveError } from '../drive/errors.ts'
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
@@ -64,7 +64,7 @@ describe('AutoSaver', () => {
   it('retries with exponential backoff when offline', async () => {
     let fail = 3
     const { saver, flush } = setup(async () => {
-      if (fail-- > 0) throw new GitHubError('network', 'offline')
+      if (fail-- > 0) throw new DriveError('network', 'offline')
       return { remaining: 0 }
     })
     await saver.saveNow()
@@ -83,7 +83,7 @@ describe('AutoSaver', () => {
   it('reports error status for non-network failures and keeps retrying', async () => {
     let fail = true
     const { saver } = setup(async () => {
-      if (fail) throw new GitHubError('forbidden', 'nope')
+      if (fail) throw new DriveError('forbidden', 'nope')
       return { remaining: 0 }
     })
     await saver.saveNow()

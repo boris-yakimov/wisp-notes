@@ -1,129 +1,116 @@
-import { CheckCircle2, Loader2 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
-import { GitHubClient, validateConnection } from '../github/client.ts'
+import { CheckCircle2, Loader2, LogOut } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { getCache } from '../cache/instance.ts'
+import { getAuth, GOOGLE_CLIENT_ID } from '../drive/auth.ts'
+import { DriveClient } from '../drive/client.ts'
+import { toDriveError } from '../drive/errors.ts'
+import { useRepo } from '../repo/session.ts'
+import { confirmDialog } from '../store/dialog.ts'
 import { useApp } from '../store/app.ts'
 
 interface Props {
-  /** Called after a successful connection. */
+  /** Called after a successful sign-in. */
   onConnected?: () => void
 }
 
-type Status =
-  | { state: 'idle' }
-  | { state: 'checking' }
-  | { state: 'ok'; fullName: string }
-  | { state: 'error'; message: string; canInit?: boolean }
+type Status = { state: 'idle' } | { state: 'busy' } | { state: 'error'; message: string }
 
-const inputCls =
-  'w-full rounded border border-neutral-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500'
+const primaryBtn =
+  'inline-flex items-center gap-2 rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60'
 
 export function SettingsPage({ onConnected }: Props) {
-  const settings = useApp((s) => s.settings)
+  const account = useApp((s) => s.settings.account)
   const updateSettings = useApp((s) => s.updateSettings)
-  const [form, setForm] = useState({
-    token: settings.token,
-    owner: settings.owner,
-    repo: settings.repo,
-    branch: settings.branch || 'main',
-  })
   const [status, setStatus] = useState<Status>({ state: 'idle' })
 
-  const field = (name: keyof typeof form) => ({
-    id: `settings-${name}`,
-    value: form[name],
-    onChange: (e: { target: { value: string } }) => setForm((f) => ({ ...f, [name]: e.target.value.trim() })),
-  })
+  useEffect(() => {
+    if (GOOGLE_CLIENT_ID)
+      void getAuth()
+        .preload()
+        .catch(() => undefined)
+  }, [])
 
-  async function connect(e?: FormEvent, init = false) {
-    e?.preventDefault()
-    if (!form.token || !form.owner || !form.repo || !form.branch) {
-      setStatus({ state: 'error', message: 'All fields are required.' })
-      return
-    }
-    setStatus({ state: 'checking' })
-    const client = new GitHubClient(form)
-    if (init) {
-      try {
-        await client.initializeEmptyRepo()
-      } catch (err) {
-        setStatus({ state: 'error', message: (err as Error).message })
-        return
-      }
-    }
-    const res = await validateConnection(client)
-    if (res.ok) {
-      updateSettings(form)
-      setStatus({ state: 'ok', fullName: res.fullName })
+  async function signIn() {
+    setStatus({ state: 'busy' })
+    try {
+      const auth = getAuth()
+      await auth.signIn(account?.email)
+      const client = new DriveClient(auth)
+      const [me] = await Promise.all([client.about(), client.ensureRoot()])
+      updateSettings({ account: me })
+      setStatus({ state: 'idle' })
       onConnected?.()
-    } else {
-      setStatus({ state: 'error', message: res.message, canInit: res.kind === 'empty-repo' })
+    } catch (e) {
+      const err = toDriveError(e)
+      setStatus(err.kind === 'cancelled' ? { state: 'idle' } : { state: 'error', message: err.message })
     }
+  }
+
+  async function signOut() {
+    const unsaved = Object.keys(useRepo.getState().dirty).length
+    const ok = await confirmDialog({
+      title: 'Sign out?',
+      message: unsaved
+        ? `${unsaved} note${unsaved === 1 ? ' has' : 's have'} unsaved changes that will be lost. Notes stored on this device are removed; your notes in Google Drive are not affected.`
+        : 'Notes stored on this device are removed. Your notes in Google Drive are not affected.',
+      confirmLabel: 'Sign out',
+      danger: unsaved > 0,
+    })
+    if (!ok) return
+    getAuth().signOut()
+    await (await getCache()).clearAll()
+    updateSettings({ account: null })
   }
 
   return (
     <div className="mx-auto max-w-md p-6">
-      <h2 className="mb-1 text-lg font-semibold">Connect to GitHub</h2>
-      <p className="mb-4 text-sm text-neutral-600">
-        Use a fine-grained personal access token limited to your notes repository with{' '}
-        <strong>Contents: Read and write</strong> permission only. The token is stored only in this browser.
-      </p>
-      <form onSubmit={(e) => void connect(e)} className="space-y-3" noValidate>
-        <div>
-          <label htmlFor="settings-token" className="mb-1 block text-sm font-medium">
-            Personal access token
-          </label>
-          <input {...field('token')} type="password" autoComplete="off" className={inputCls} />
-        </div>
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label htmlFor="settings-owner" className="mb-1 block text-sm font-medium">
-              Owner
-            </label>
-            <input {...field('owner')} className={inputCls} placeholder="your-user" />
-          </div>
-          <div className="flex-1">
-            <label htmlFor="settings-repo" className="mb-1 block text-sm font-medium">
-              Repository
-            </label>
-            <input {...field('repo')} className={inputCls} placeholder="notes" />
-          </div>
-        </div>
-        <div>
-          <label htmlFor="settings-branch" className="mb-1 block text-sm font-medium">
-            Branch
-          </label>
-          <input {...field('branch')} className={inputCls} />
-        </div>
-        <button
-          type="submit"
-          disabled={status.state === 'checking'}
-          className="inline-flex items-center gap-2 rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-        >
-          {status.state === 'checking' && <Loader2 size={14} className="animate-spin" />}
-          Connect
-        </button>
-      </form>
-      <div aria-live="polite" className="mt-4 text-sm">
-        {status.state === 'ok' && (
-          <p className="flex items-center gap-1.5 text-green-700">
-            <CheckCircle2 size={16} /> Connected to {status.fullName}
+      {account ? (
+        <>
+          <h2 className="mb-1 text-lg font-semibold">Google Drive</h2>
+          <p className="mb-3 flex items-center gap-1.5 text-sm text-green-700">
+            <CheckCircle2 size={16} /> Signed in as {account.email}
           </p>
-        )}
-        {status.state === 'error' && (
-          <div role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-red-800">
-            <p>{status.message}</p>
-            {status.canInit && (
-              <button
-                type="button"
-                onClick={() => void connect(undefined, true)}
-                className="mt-2 rounded border border-red-300 bg-white px-2 py-1 text-xs hover:bg-red-100"
-              >
-                Initialize repository
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+          <p className="mb-4 text-sm text-neutral-600">
+            Notes are stored in the “Wisp Notes” folder in your Google Drive.
+          </p>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="inline-flex items-center gap-2 rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+          >
+            <LogOut size={14} /> Sign out
+          </button>
+        </>
+      ) : (
+        <>
+          <h2 className="mb-1 text-lg font-semibold">Sign in</h2>
+          <p className="mb-4 text-sm text-neutral-600">
+            Wisp Notes stores your notes in a “Wisp Notes” folder in your Google Drive. It can only access
+            files it created itself.
+          </p>
+          {GOOGLE_CLIENT_ID ? (
+            <button
+              type="button"
+              onClick={() => void signIn()}
+              disabled={status.state === 'busy'}
+              className={primaryBtn}
+            >
+              {status.state === 'busy' && <Loader2 size={14} className="animate-spin" />}
+              Sign in with Google
+            </button>
+          ) : (
+            <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+              No Google client ID is configured. Set <code>VITE_GOOGLE_CLIENT_ID</code> in{' '}
+              <code>.env.local</code> (see README) and restart the app.
+            </p>
+          )}
+        </>
+      )}
+      {status.state === 'error' && (
+        <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+          {status.message}
+        </p>
+      )}
       <Preferences />
     </div>
   )

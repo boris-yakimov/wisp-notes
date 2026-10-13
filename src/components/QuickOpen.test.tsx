@@ -2,10 +2,10 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useRepo } from '../repo/session.ts'
 import { useUi } from '../store/ui.ts'
-import { setupFakeGitHub } from '../test/msw.ts'
+import { setupFakeDrive } from '../test/msw.ts'
 import { getEditorView, renderApp, typeInEditor } from '../test/renderApp.tsx'
 
-const fake = setupFakeGitHub({
+const fake = setupFakeDrive({
   files: {
     'Work/Roadmap.md': '# Roadmap\n\nShip the quarterly milestones.',
     'Home/Groceries.md': 'Milk, eggs and a roadmap poster.',
@@ -91,7 +91,7 @@ describe('quick open (T12)', () => {
     await waitFor(() => expect(options()).toHaveLength(1), { timeout: 4000 })
     first.unmount()
 
-    fake.gh.offline = true
+    fake.drive.offline = true
     useUi.setState({ quickOpen: false })
     renderApp('/')
     const input = await openPalette()

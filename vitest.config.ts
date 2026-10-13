@@ -9,5 +9,6 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     restoreMocks: true,
+    env: { VITE_GOOGLE_CLIENT_ID: 'test-client-id' },
   },
 })

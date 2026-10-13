@@ -1,9 +1,10 @@
-import { FilePlus, FolderPlus, ImageIcon, Pencil, Search, Trash2 } from 'lucide-react'
+import { FilePlus, FolderInput, FolderPlus, ImageIcon, Pencil, Search, Trash2, Upload } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import type { FolderNode, NoteNode } from '../repo/tree.ts'
 import { useUi } from '../store/ui.ts'
 import { ContextMenu, type MenuItem } from './ContextMenu.tsx'
 import { Sidebar } from './Sidebar.tsx'
+import { useImportPicker } from './useImportPicker.ts'
 import { useTreeActions } from './useTreeActions.ts'
 
 const headerBtn = 'rounded p-1.5 text-neutral-600 hover:bg-neutral-200/70'
@@ -11,6 +12,7 @@ const headerBtn = 'rounded p-1.5 text-neutral-600 hover:bg-neutral-200/70'
 /** Sidebar with header buttons, context menus and note/folder operations. */
 export function NotesSidebar() {
   const actions = useTreeActions()
+  const pickImport = useImportPicker()
   const setQuickOpen = useUi((s) => s.setQuickOpen)
   const [menu, setMenu] = useState<{ node: FolderNode | NoteNode; x: number; y: number } | null>(null)
   const onMenu = useCallback(
@@ -39,6 +41,12 @@ export function NotesSidebar() {
         label: 'New folder',
         icon: <FolderPlus size={14} />,
         onSelect: () => void actions.newFolder(node.path),
+      },
+      { label: 'Import files…', icon: <Upload size={14} />, onSelect: () => pickImport(node.path, 'files') },
+      {
+        label: 'Import folder…',
+        icon: <FolderInput size={14} />,
+        onSelect: () => pickImport(node.path, 'folder'),
       },
     ]
     if (node.path === '') return create
@@ -87,6 +95,15 @@ export function NotesSidebar() {
               onClick={() => void actions.newFolder('')}
             >
               <FolderPlus size={16} />
+            </button>
+            <button
+              type="button"
+              aria-label="Import folder"
+              title="Import a folder (e.g. a Notion export)"
+              className={headerBtn}
+              onClick={() => pickImport('', 'folder')}
+            >
+              <FolderInput size={16} />
             </button>
           </div>
         }

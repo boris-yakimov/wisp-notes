@@ -1,8 +1,9 @@
-import { AlertCircle, FilePlus, FolderPlus, Loader2, Search } from 'lucide-react'
+import { AlertCircle, FilePlus, FolderInput, FolderPlus, Loader2, Search } from 'lucide-react'
 import { Link } from 'react-router'
 import { isNotePath } from '../repo/paths.ts'
 import { useRepo } from '../repo/session.ts'
 import { useUi } from '../store/ui.ts'
+import { useImportPicker } from './useImportPicker.ts'
 import { useTreeActions } from './useTreeActions.ts'
 
 const btn =
@@ -12,15 +13,13 @@ const btn =
 export function Home() {
   const phase = useRepo((s) => s.phase)
   const error = useRepo((s) => s.error)
-  // A root README (e.g. created by "Initialize repository") doesn't count as a note here.
   const noteCount = useRepo(
-    (s) =>
-      s.snapshot?.entries.filter((e) => isNotePath(e.path) && e.path.toLowerCase() !== 'readme.md').length ??
-      null,
+    (s) => s.snapshot?.entries.filter((e) => !e.folder && isNotePath(e.path)).length ?? null,
   )
   const setQuickOpen = useUi((s) => s.setQuickOpen)
   const setSidebarOpen = useUi((s) => s.setSidebarOpen)
   const actions = useTreeActions()
+  const pickImport = useImportPicker()
 
   if (phase === 'error') {
     return (
@@ -48,17 +47,20 @@ export function Home() {
   if (noteCount === 0) {
     return (
       <div className="mx-auto max-w-md p-8 text-center">
-        <h2 className="mb-1 text-lg font-semibold">Your notes repository is empty</h2>
+        <h2 className="mb-1 text-lg font-semibold">No notes yet</h2>
         <p className="mb-5 text-sm text-neutral-600">
-          Create your first note or a folder to organize notes by category. Everything is saved to GitHub
-          automatically.
+          Create your first note, a folder to organize notes by category, or import existing Markdown files
+          (e.g. a Notion export). Everything is saved to your Google Drive automatically.
         </p>
-        <div className="flex justify-center gap-2">
+        <div className="flex flex-wrap justify-center gap-2">
           <button type="button" className={btn} onClick={() => void actions.newNote('')}>
             <FilePlus size={16} /> Create a note
           </button>
           <button type="button" className={btn} onClick={() => void actions.newFolder('')}>
             <FolderPlus size={16} /> Create a folder
+          </button>
+          <button type="button" className={btn} onClick={() => pickImport('', 'folder')}>
+            <FolderInput size={16} /> Import a folder
           </button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 // E2E runs against the production build (so the strict CSP is exercised).
-// The GitHub API is mocked per test via page.route (see e2e/fixtures.ts).
+// Google sign-in and the Drive API are mocked per test via page.route (see e2e/fixtures.ts).
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -19,6 +19,8 @@ export default defineConfig({
     command: 'npm run build && npx vite preview --port 4173 --strictPort',
     url: 'http://localhost:4173',
     reuseExistingServer: false,
+    // Real client ID from .env.local is not needed: Google sign-in is stubbed (e2e/fixtures.ts).
+    env: { VITE_GOOGLE_CLIENT_ID: 'e2e-client-id' },
     timeout: 120_000,
   },
 })

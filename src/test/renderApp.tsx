@@ -4,18 +4,27 @@ import { MemoryRouter } from 'react-router'
 import App from '../App.tsx'
 import { defaultSettings, saveSettings, type Settings } from '../settings/settings.ts'
 import { useApp } from '../store/app.ts'
+import { installFakeGis, storeToken } from './fakeGis.ts'
 
-export function renderApp(url = '/', settings: Partial<Settings> = {}) {
-  const s = {
+/**
+ * Render the app signed in as me@example.com with a valid token and a fake GIS installed.
+ * Pass `signedIn: false` to start signed out.
+ */
+export function renderApp(
+  url = '/',
+  settings: Partial<Settings> = {},
+  opts: { signedIn?: boolean; token?: boolean } = {},
+) {
+  const signedIn = opts.signedIn ?? true
+  const s: Settings = {
     ...defaultSettings,
-    token: 'good-token',
-    owner: 'me',
-    repo: 'notes',
-    branch: 'main',
+    account: signedIn ? { email: 'me@example.com', name: 'Me' } : null,
     ...settings,
   }
   saveSettings(s)
   useApp.setState({ settings: s })
+  installFakeGis()
+  if (signedIn && opts.token !== false) storeToken()
   return render(
     <MemoryRouter initialEntries={[url]}>
       <App />

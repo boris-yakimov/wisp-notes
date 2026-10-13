@@ -1,4 +1,8 @@
-import { AlertTriangle, Check, CloudOff, Loader2, X } from 'lucide-react'
+import { AlertTriangle, Check, CloudOff, KeyRound, Loader2, X } from 'lucide-react'
+import { useState } from 'react'
+import { getAuth } from '../drive/auth.ts'
+import { toDriveError } from '../drive/errors.ts'
+import { useApp } from '../store/app.ts'
 import { dismissNotice, useRepo } from '../repo/session.ts'
 import { useUi } from '../store/ui.ts'
 
@@ -85,6 +89,58 @@ export function Notices() {
           </button>
         </div>
       ))}
+    </div>
+  )
+}
+
+/** Shown when Google access expired: edits stay on this device until the user signs in again. */
+export function AuthBanner() {
+  const required = useRepo((s) => s.authRequired)
+  const email = useApp((s) => s.settings.account?.email)
+  const [error, setError] = useState<string | null>(null)
+  if (!required) return null
+  const signIn = () => {
+    setError(null)
+    getAuth()
+      .signIn(email)
+      .catch((e: unknown) => {
+        const err = toDriveError(e)
+        if (err.kind !== 'cancelled') setError(err.message)
+      })
+  }
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-sm text-amber-900"
+    >
+      <KeyRound size={14} className="shrink-0" />
+      <span className="flex-1">
+        Google sign-in expired. Your edits are kept on this device until you continue.
+        {error && <span className="ml-1 text-red-700">{error}</span>}
+      </span>
+      <button
+        type="button"
+        onClick={signIn}
+        className="rounded bg-amber-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-amber-700"
+      >
+        Continue{email ? ` as ${email}` : ''}
+      </button>
+    </div>
+  )
+}
+
+/** Progress of a running import. */
+export function ImportProgress() {
+  const importing = useRepo((s) => s.importing)
+  if (!importing) return null
+  return (
+    <div
+      role="status"
+      aria-label="Import progress"
+      className="fixed bottom-8 left-3 z-50 flex items-center gap-2 rounded border border-neutral-200 bg-white p-2.5 text-sm shadow-md"
+    >
+      <Loader2 size={14} className="animate-spin" />
+      Importing {importing.done} / {importing.total}…
     </div>
   )
 }

@@ -1,61 +1,70 @@
 # Wisp Notes — Architecture
 
-Static React SPA. The browser talks directly to the GitHub REST API; there is no backend.
-Notes are Markdown files in a private repo; folders are categories; `_meta.json` in a folder
-holds its icon (`{ "icon": "book-open" }`) and doubles as a placeholder so empty folders exist in Git.
+Static React SPA. The browser talks directly to the Google Drive API v3; there is no backend.
+Notes are Markdown files in a `Wisp Notes` folder in the user's Drive; subfolders are categories;
+`_meta.json` in a folder holds its icon (`{ "icon": "book-open" }`). Access uses the `drive.file` scope:
+the app only sees files it created or imported.
 
 ## Modules (`src/`)
 
-| Path                                   | Responsibility                                                                                                                                                                                                          |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `github/client.ts`                     | Typed Octokit wrapper: repo info, branch head, recursive tree, blobs, Git Data API writes. `validateConnection`.                                                                                                        |
-| `github/errors.ts`                     | Normalizes failures into `GitHubError.kind` (`bad-token`, `forbidden`, `not-found`, `empty-repo`, `conflict`, `network`).                                                                                               |
-| `github/base64.ts`, `github/sha.ts`    | UTF-8 safe base64; local git blob SHA-1 (matches GitHub's SHAs).                                                                                                                                                        |
-| `settings/settings.ts`, `store/app.ts` | Token/owner/repo/branch + editor prefs in `localStorage`.                                                                                                                                                               |
-| `cache/db.ts`                          | IndexedDB (`idb`): `snapshots` (last tree per repo), `blobs` (content by SHA — never stale), `drafts` (unsaved edits).                                                                                                  |
-| `repo/session.ts`                      | **Central service.** `RepoSession` owns client + cache + drafts + auto-saver, serializes commits, exposes reactive state through the `useRepo` zustand store.                                                           |
-| `repo/commit.ts`                       | `commitChanges`: blobs → tree (`base_tree`) → commit → non-forced ref update, with conflict handling.                                                                                                                   |
-| `repo/autosave.ts`                     | `AutoSaver`: 3 s idle debounce, 45 s max interval, one flush at a time, exponential backoff retry. Pure timer logic.                                                                                                    |
-| `repo/ops.ts`                          | Pure change-set builders for create/rename/delete notes & folders and icon changes (each = one commit).                                                                                                                 |
-| `repo/tree.ts`, `repo/paths.ts`        | `buildTree` (flat paths → sorted folder tree), meta parsing, path helpers, conflict-copy names.                                                                                                                         |
-| `search/index.ts`, `search/service.ts` | MiniSearch index (title ×4, path, content; prefix + fuzzy, AND). Service prefetches all note blobs (4 concurrent) and re-indexes incrementally on session changes.                                                      |
-| `editor/Editor.tsx`                    | CodeMirror 6 (lazy-loaded chunk): Markdown, vim (`@replit/codemirror-vim`, `:w` saves), history, search. Options toggled via compartments.                                                                              |
-| `editor/livePreview.ts`                | ViewPlugin hiding Markdown syntax outside lines touched by the selection; checkbox/bullet widgets; only visible ranges. `computeDecorations` is pure and unit-tested.                                                   |
-| `components/`                          | UI: `AppShell` (sidebar column / mobile drawer), `NotesSidebar` + `Sidebar` (tree, context menu), `NotePage`, `QuickOpen` (Ctrl/Cmd+K), `DialogHost` (prompt/confirm/icon picker), `SettingsPage`, `Home`, `StatusBar`. |
-| `store/ui.ts`, `store/dialog.ts`       | UI-only state (expanded folders, drawer, palette, vim mode) and promise-based dialogs.                                                                                                                                  |
+| Path                                         | Responsibility                                                                                                                                                                                                  |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `drive/auth.ts`                              | Google Identity Services token model: lazy-loads the GIS script, `signIn` (popup, needs a click), token in `localStorage` until expiry (≤1 h), `getToken` never opens UI (throws `auth`).                       |
+| `drive/client.ts`                            | `fetch`-based Drive client: `ensureRoot` (finds the root folder by `appProperties.wispRoot`), `listAll`, changes feed, download, multipart create, content update, rename/move, trash.                          |
+| `drive/remoteTree.ts`                        | `RemoteTree`: Drive items by ID → derived path entries (`Entry {path, id, folder, md5}`); applies change-feed deltas.                                                                                           |
+| `drive/errors.ts`, `drive/md5.ts`            | Normalized `DriveError.kind` (`auth`, `cancelled`, `forbidden`, `quota`, `rate-limit`, `not-found`, `network`); MD5 of UTF-8 text (matches Drive's `md5Checksum`).                                              |
+| `settings/settings.ts`, `store/app.ts`       | Signed-in account + editor prefs in `localStorage`.                                                                                                                                                             |
+| `cache/db.ts`                                | IndexedDB (`idb`): `snapshots` (remote state + change token per account), `blobs` (content by MD5 — never stale), `drafts` (unsaved edits).                                                                     |
+| `repo/session.ts`                            | **Central service.** `RepoSession` owns Drive client + cache + drafts + auto-saver, serializes all syncs and writes, exposes reactive state through the `useRepo` zustand store.                                |
+| `repo/apply.ts`                              | `executeOps`: runs path-based `DriveOp`s (`write`, `mkdir`, `rename`, `trash`) against Drive with conflict handling; `applyOpsToEntries` for optimistic UI.                                                     |
+| `repo/autosave.ts`                           | `AutoSaver`: 3 s idle debounce, 45 s max interval, one flush at a time, exponential backoff retry. Pure timer logic.                                                                                            |
+| `repo/ops.ts`                                | Pure builders for create/rename/delete notes & folders, icon changes and imports.                                                                                                                               |
+| `repo/tree.ts`, `repo/paths.ts`              | `buildTree` (entries → sorted folder tree), meta parsing, path helpers, conflict-copy names.                                                                                                                    |
+| `repo/useRepoSession.ts`                     | Creates the session for the account; refreshes on focus/visibility/online and every 60 s while visible.                                                                                                         |
+| `search/index.ts`, `search/service.ts`       | MiniSearch index (title ×4, path, content; prefix + fuzzy, AND). Service prefetches note contents (4 concurrent) and re-indexes incrementally.                                                                  |
+| `editor/Editor.tsx`, `editor/livePreview.ts` | CodeMirror 6 (lazy chunk) with vim (`:w` saves) and the live-preview ViewPlugin (`computeDecorations` is pure and unit-tested).                                                                                 |
+| `components/`                                | UI: `AppShell`, `NotesSidebar`/`Sidebar` (tree, context menu, import), `NotePage`, `QuickOpen`, `DialogHost`, `SettingsPage` (sign in/out), `Home`, `StatusBar` (save status, sign-in banner, import progress). |
 
 ## Data flow
 
-1. **Startup**: `RepoSession.start()` renders the cached snapshot + drafts from IndexedDB immediately, then
-   fetches branch head + recursive tree (2 requests). Blobs are fetched lazily by SHA and cached forever;
-   only SHAs not in the cache are downloaded. Offline → cached data, "Offline" status.
+1. **Startup**: render the cached remote state + drafts from IndexedDB immediately, then `changes.list` since the
+   stored change token (full `files.list` on first use or if the token is invalid). Only files whose MD5 isn't
+   cached are downloaded (lazily, or by the search prefetch). Repeats on tab focus/visibility and every 60 s.
 2. **Editing**: every change → `editNote` → draft written to IndexedDB (survives tab close) → `AutoSaver.notifyChange`.
-3. **Saving**: `flushDrafts` batches all drafts into one commit via `commit()` (serialized queue).
-   Ctrl/Cmd+S and `:w` call `saver.saveNow()`. Drafts left over from a previous session are saved on startup.
-4. **Conflicts**: each change carries the blob SHA it was based on. If the ref update is rejected or the remote
-   blob differs from the base, the head is refetched; unchanged-remote files are re-applied on top, changed ones
-   are written as `Name (conflict YYYY-MM-DD).md` and the user is notified. Deletes of remotely changed files are dropped.
-5. **Structural ops** (`useTreeActions`): build change set (`ops.ts`) → flush affected drafts → `applyOptimistic`
-   (tree updates at once, rolls back on failure) → one commit. Renames reuse existing blob SHAs (no re-upload).
-6. **Search**: `SearchService` listens to session changes and reindexes only notes whose version (SHA or draft
-   timestamp) changed. Works offline from cached blobs.
+3. **Saving**: `flushDrafts` turns all drafts into `write` ops; `run()` (serialized queue) first pulls Drive
+   changes, then uploads in parallel (4 at a time). Partial failures keep the remaining drafts for retry.
+4. **Conflicts**: each draft remembers the MD5 it was based on. If Drive's current MD5 differs (and the file isn't
+   empty), ours is written as `Name (conflict YYYY-MM-DD).md` and the user is notified. A note deleted elsewhere is recreated.
+5. **Structural ops** (`useTreeActions`): build ops (`ops.ts`) → flush affected drafts → `applyOptimistic`
+   (tree updates at once, rolls back on failure). Folder rename is one Drive update; delete moves to Drive trash.
+6. **Import**: picked files keep their relative structure under the target folder; text files are uploaded as
+   strings (cached and searchable), others (screenshots) as binary. Clashing names get a ` (2)` suffix.
+7. **Auth**: tokens last ~1 h and need a click to renew. On expiry or 401, `authRequired` shows a
+   "Continue as …" banner; cached reading and local drafts keep working.
+
+## Limits
+
+- Drive has no multi-file transactions: a batch save is several independent uploads.
+- Conflict check is "pull changes → compare MD5 → write" (no conditional writes in Drive v3); the race window is small.
+- History: Drive keeps past versions for ~30 days / 100 versions per file; current files are kept indefinitely.
 
 ## Security
 
-- PAT stored in `localStorage`; recommend a fine-grained token for the single repo, Contents read/write only.
-- Production build injects a strict CSP (`vite.config.ts`): only own scripts, `connect-src` limited to
-  `api.github.com`. No third-party scripts; Markdown is never rendered as HTML.
+- `drive.file` limits access to the app's own files. Token in `localStorage` only until it expires; sign-out
+  revokes it and clears local data.
+- Production build injects a strict CSP (`vite.config.ts`): own scripts plus `accounts.google.com/gsi/client`;
+  `connect-src` limited to `www.googleapis.com` and GIS. Markdown is never rendered as HTML.
 
 ## Testing
 
-- `npm test` — Vitest + Testing Library + MSW + fake-indexeddb. `src/test/fakeGitHub.ts` is an in-memory GitHub
-  (trees, blobs, commits, refs, conflicts, offline, injected failures) used by MSW (`src/test/msw.ts`).
-- `npm run e2e` — Playwright against the production build (CSP active), desktop + Pixel 7 viewports,
-  same fake via `page.route` (`e2e/fixtures.ts`). Fails on CSP violations or page errors.
+- `npm test` — Vitest + Testing Library + MSW + fake-indexeddb. `src/test/fakeDrive.ts` is an in-memory Drive
+  (files, folders, MD5s, changes feed, pagination, offline, injected failures); `src/test/fakeGis.ts` stubs Google sign-in.
+- `npm run e2e` — Playwright against the production build (CSP active), desktop + Pixel 7 viewports, same fake
+  via `page.route` plus a stubbed GIS script (`e2e/fixtures.ts`). Fails on CSP violations or page errors.
 - `npm run lint`, `npm run typecheck`, `npm run build`.
 
 ## Conventions for maintainers
 
-- Keep GitHub/IndexedDB logic out of components: add methods to `RepoSession` or pure builders in `repo/`.
+- Keep Drive/IndexedDB logic out of components: add methods to `RepoSession` or pure builders in `repo/`.
 - New operations: pure builder in `ops.ts` + unit test, then wire through `useTreeActions.run`.
 - All dependencies pinned to exact versions.

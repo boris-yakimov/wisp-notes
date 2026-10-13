@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import { Cache, type Draft } from '../cache/db.ts'
-import type { GitHubClient, Snapshot } from '../github/client.ts'
-import { GitHubError, isNetworkError, toGitHubError } from '../github/errors.ts'
-import { gitBlobSha } from '../github/sha.ts'
+import type { DriveClient } from '../drive/client.ts'
+import { DriveError, isAuthError, isNetworkError, toDriveError } from '../drive/errors.ts'
+import { md5Hex } from '../drive/md5.ts'
+import { RemoteTree, type Entry } from '../drive/remoteTree.ts'
+import { applyOpsToEntries, executeOps, type DriveOp, type ExecResult } from './apply.ts'
 import { AutoSaver, type SaveStatus } from './autosave.ts'
-import { commitChanges, describeChanges, type Change, type CommitResult } from './commit.ts'
+import { importOp, type ImportFile } from './ops.ts'
 import { dirname, isMetaPath, isNotePath } from './paths.ts'
 import { parseMeta, type FolderMeta } from './tree.ts'
 
@@ -14,18 +16,25 @@ export interface Notice {
   message: string
 }
 
+/** What the UI shows: remote state plus optimistic, not-yet-confirmed operations. */
+export interface View {
+  entries: Entry[]
+}
+
 /** Reactive state for the UI. Mutated only by RepoSession. */
 export interface RepoState {
   phase: 'idle' | 'loading' | 'ready' | 'error'
   error: string | null
   online: boolean
-  /** What the UI shows (may include optimistic, not-yet-committed operations). */
-  snapshot: Snapshot | null
+  /** True when Google access expired and the user must click "Sign in". */
+  authRequired: boolean
+  snapshot: View | null
   metas: Record<string, FolderMeta>
   /** Paths with unsaved edits. */
   dirty: Record<string, true>
   saveStatus: SaveStatus
   saveError: string | null
+  importing: { done: number; total: number } | null
   notices: Notice[]
 }
 
@@ -33,11 +42,13 @@ const initialState: RepoState = {
   phase: 'idle',
   error: null,
   online: true,
+  authRequired: false,
   snapshot: null,
   metas: {},
   dirty: {},
   saveStatus: 'saved',
   saveError: null,
+  importing: null,
   notices: [],
 }
 
@@ -62,27 +73,28 @@ export interface SessionOptions {
 type Listener = () => void
 
 /**
- * One connected repository. Owns the GitHub client, IndexedDB cache, drafts,
- * the auto-saver, and serializes all commits. Exposes reactive state via `useRepo`.
+ * The signed-in user's notes in Google Drive. Owns the Drive client, IndexedDB cache, drafts and
+ * the auto-saver, and serializes all Drive syncs and writes. Exposes reactive state via `useRepo`.
  */
 export class RepoSession {
   readonly saver: AutoSaver
-  /** Last snapshot confirmed by GitHub. Base for all commits. */
-  private remote: Snapshot | null = null
-  private shas = new Map<string, string>()
+  /** Last state confirmed by Drive. */
+  private remote: RemoteTree | null = null
+  /** Currently displayed entries by path. */
+  private shown = new Map<string, Entry>()
   private drafts = new Map<string, Draft>()
-  /** Last saved content of notes read/written this session (path -> content). */
+  /** Last saved content of notes read/written this session (path → content), for undo detection. */
   private savedContent = new Map<string, string>()
   private queue: Promise<unknown> = Promise.resolve()
   private listeners = new Set<Listener>()
   private disposed = false
   private now: () => Date
 
-  readonly client: GitHubClient
+  readonly client: DriveClient
   readonly cache: Cache
   readonly repoKey: string
 
-  constructor(client: GitHubClient, cache: Cache, repoKey: string, opts: SessionOptions = {}) {
+  constructor(client: DriveClient, cache: Cache, repoKey: string, opts: SessionOptions = {}) {
     this.client = client
     this.cache = cache
     this.repoKey = repoKey
@@ -104,7 +116,7 @@ export class RepoSession {
     this.listeners.clear()
   }
 
-  /** Subscribe to snapshot/draft changes (e.g. the search index). */
+  /** Subscribe to content/structure changes (e.g. the search index). */
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn)
     return () => this.listeners.delete(fn)
@@ -114,9 +126,21 @@ export class RepoSession {
     for (const fn of this.listeners) fn()
   }
 
+  /** Run Drive work one at a time (syncs and writes never interleave). */
+  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const p = this.queue.then(fn, fn)
+    this.queue = p.catch(() => undefined)
+    return p
+  }
+
+  private noteError(e: unknown) {
+    if (isNetworkError(e)) useRepo.setState({ online: false })
+    else if (isAuthError(e)) useRepo.setState({ authRequired: true })
+  }
+
   // ---------------------------------------------------------------- loading
 
-  /** Show cached state instantly, restore drafts, then revalidate against GitHub. */
+  /** Show cached state instantly, restore drafts, then fetch the latest state from Drive. */
   async start(): Promise<void> {
     useRepo.setState({ phase: 'loading' })
     const [cached, drafts] = await Promise.all([
@@ -126,83 +150,109 @@ export class RepoSession {
     this.drafts = new Map(drafts.map((d) => [d.path, d]))
     useRepo.setState({ dirty: Object.fromEntries(drafts.map((d) => [d.path, true as const])) })
     if (cached) {
-      await this.setRemote(cached, false)
+      await this.setRemote(new RemoteTree(cached), false)
       useRepo.setState({ phase: 'ready' })
     }
     await this.revalidate()
     if (this.drafts.size > 0 && !this.disposed) void this.saver.saveNow()
   }
 
-  /** Fetch the current head; only blobs whose SHA is not cached are downloaded later. */
+  /** Fetch Drive changes since the last sync (or everything on first use). */
   async revalidate(): Promise<void> {
     try {
-      const snap = await this.client.getSnapshot()
-      useRepo.setState({ online: true })
-      if (snap.commitSha !== this.remote?.commitSha) await this.setRemote(snap, true)
-      useRepo.setState({ phase: 'ready', error: null })
+      await this.enqueue(() => this.pull())
+      useRepo.setState({ phase: 'ready', error: null, online: true, authRequired: false })
     } catch (e) {
-      const err = toGitHubError(e)
-      if (err.kind === 'network') {
-        useRepo.setState({ online: false })
-        if (!this.remote) {
-          useRepo.setState({
-            phase: 'error',
-            error: 'You are offline and no cached copy of the notes exists yet.',
-          })
-        }
-      } else if (!this.remote) {
-        useRepo.setState({ phase: 'error', error: err.message })
-      } else {
+      const err = toDriveError(e)
+      this.noteError(err)
+      if (!this.remote && err.kind !== 'auth') {
+        useRepo.setState({
+          phase: 'error',
+          error:
+            err.kind === 'network'
+              ? 'You are offline and no copy of your notes is stored on this device yet.'
+              : err.message,
+        })
+      } else if (err.kind !== 'network' && err.kind !== 'auth') {
         notify(`Could not refresh: ${err.message}`, 'error')
       }
     }
   }
 
-  private async setRemote(snap: Snapshot, persist: boolean): Promise<void> {
-    this.remote = snap
-    this.showSnapshot(snap)
-    if (persist) await this.cache.putSnapshot(this.repoKey, snap)
-    await this.loadMetas(snap)
+  /** Bring `remote` up to date. Must run inside the queue. */
+  private async pull(): Promise<void> {
+    const remote = this.remote
+    if (remote?.changeToken) {
+      try {
+        const { changes, nextToken } = await this.client.listChanges(remote.changeToken)
+        if (!changes.length && nextToken === remote.changeToken) return
+        const tree = remote.clone()
+        tree.applyChanges(changes)
+        tree.changeToken = nextToken
+        await this.setRemote(tree, true)
+        return
+      } catch (e) {
+        const err = toDriveError(e)
+        if (err.kind === 'network' || err.kind === 'auth') throw err
+        // Invalid/expired token: fall back to a full listing.
+      }
+    }
+    const rootId = remote?.rootId ?? (await this.client.ensureRoot())
+    const changeToken = await this.client.getStartPageToken() // before listing: no change is missed
+    const items = await this.client.listAll()
+    await this.setRemote(new RemoteTree({ rootId, changeToken, items }), true)
   }
 
-  private showSnapshot(snap: Snapshot) {
-    this.shas = new Map(snap.entries.map((e) => [e.path, e.sha]))
-    useRepo.setState({ snapshot: snap })
+  private async setRemote(tree: RemoteTree, persist: boolean): Promise<void> {
+    this.remote = tree
+    this.show(tree.entries())
+    if (persist) await this.cache.putSnapshot(this.repoKey, tree.toState())
+    await this.loadMetas()
+  }
+
+  private show(entries: Entry[]) {
+    this.shown = new Map(entries.map((e) => [e.path, e]))
+    useRepo.setState({ snapshot: { entries } })
     this.emit()
   }
 
-  private async loadMetas(snap: Snapshot): Promise<void> {
+  private async loadMetas(): Promise<void> {
+    const view = useRepo.getState().snapshot
     const metas: Record<string, FolderMeta> = {}
     await Promise.all(
-      snap.entries
-        .filter((e) => isMetaPath(e.path))
+      [...this.shown.values()]
+        .filter((e) => !e.folder && isMetaPath(e.path))
         .map(async (e) => {
           try {
-            metas[dirname(e.path)] = parseMeta(await this.readBlob(e.sha))
+            metas[dirname(e.path)] = parseMeta(await this.readEntry(e))
           } catch {
-            /* offline and not cached: fall back to default icon */
+            /* offline and not cached: default icon */
           }
         }),
     )
-    if (this.remote === snap || useRepo.getState().snapshot === snap) useRepo.setState({ metas })
+    if (useRepo.getState().snapshot === view) useRepo.setState({ metas })
   }
 
   // ---------------------------------------------------------------- reading
 
+  /** Content hash of a displayed file. */
   shaOf(path: string): string | undefined {
-    return this.shas.get(path)
+    return this.shown.get(path)?.md5
   }
 
   exists(path: string): boolean {
-    return this.shas.has(path)
+    return this.shown.has(path)
   }
 
-  /** Blob content by SHA: IndexedDB first, then GitHub (and cache it). */
-  async readBlob(sha: string): Promise<string> {
-    const cached = await this.cache.getBlob(sha)
-    if (cached !== undefined) return cached
-    const content = await this.client.getBlob(sha)
-    await this.cache.putBlob(sha, content)
+  /** File content: IndexedDB by hash first, else download from Drive (and cache it). */
+  private async readEntry(e: Entry): Promise<string> {
+    if (e.md5) {
+      const cached = await this.cache.getBlob(e.md5)
+      if (cached !== undefined) return cached
+    }
+    if (e.id.startsWith('pending:')) throw new DriveError('not-found', 'The file is still being created.')
+    const content = await this.client.download(e.id)
+    await this.cache.putBlob(md5Hex(content), content)
     return content
   }
 
@@ -210,43 +260,44 @@ export class RepoSession {
   async readCached(path: string): Promise<string | undefined> {
     const d = this.drafts.get(path)
     if (d) return d.content
-    const sha = this.shas.get(path)
-    return sha ? this.cache.getBlob(sha) : undefined
+    const md5 = this.shown.get(path)?.md5
+    return md5 ? this.cache.getBlob(md5) : undefined
   }
 
-  /** Current content of a note: unsaved draft, else blob. */
+  /** Current content of a note: unsaved draft, else the file. */
   async readNote(path: string): Promise<string> {
     const d = this.drafts.get(path)
     if (d) return d.content
-    const sha = this.shas.get(path)
-    if (!sha) throw new GitHubError('not-found', `Note "${path}" does not exist.`)
+    const e = this.shown.get(path)
+    if (!e || e.folder) throw new DriveError('not-found', `Note "${path}" does not exist.`)
     try {
-      const content = await this.readBlob(sha)
+      const content = await this.readEntry(e)
       this.savedContent.set(path, content)
       return content
-    } catch (e) {
-      if (isNetworkError(e)) throw new GitHubError('network', 'This note is not available offline yet.')
-      throw e
+    } catch (err) {
+      this.noteError(err)
+      if (isNetworkError(err)) throw new DriveError('network', 'This note is not available offline yet.')
+      if (isAuthError(err)) throw new DriveError('auth', 'Sign in again to load this note.')
+      throw err
     }
   }
 
-  /** Download all uncached note blobs (limited concurrency). Returns number fetched. */
+  /** Download all uncached notes (limited concurrency). Returns the number fetched. */
   async prefetchNotes(concurrency = 4): Promise<number> {
-    const snap = this.remote
-    if (!snap) return 0
-    const notes = snap.entries.filter((e) => isNotePath(e.path))
-    const cached = await this.cache.cachedShas(notes.map((e) => e.sha))
-    const todo = [...new Set(notes.map((e) => e.sha).filter((s) => !cached.has(s)))]
+    if (!this.remote) return 0
+    const notes = this.remote.entries().filter((e) => !e.folder && e.md5 && isNotePath(e.path))
+    const cached = await this.cache.cachedShas(notes.map((e) => e.md5!))
+    const todo = notes.filter((e) => !cached.has(e.md5!))
     let i = 0
     let fetched = 0
     const worker = async () => {
       while (i < todo.length && !this.disposed) {
-        const sha = todo[i++]!
+        const e = todo[i++]!
         try {
-          await this.readBlob(sha)
+          await this.readEntry(e)
           fetched++
-        } catch (e) {
-          if (isNetworkError(e)) return
+        } catch (err) {
+          if (isNetworkError(err) || isAuthError(err)) return
         }
       }
     }
@@ -266,29 +317,24 @@ export class RepoSession {
     return this.drafts.get(path)?.updatedAt
   }
 
-  /** Record an edit: persisted to IndexedDB immediately, committed by the auto-saver. */
+  /** Record an edit: persisted to IndexedDB immediately, saved to Drive by the auto-saver. */
   async editNote(path: string, content: string): Promise<void> {
     const existing = this.drafts.get(path)
-    // Based on the displayed SHA: optimistic creates use the real git SHA, so they match once committed.
-    const baseSha = existing ? existing.baseSha : (this.shaOf(path) ?? null)
+    const baseHash = existing ? existing.baseHash : (this.shaOf(path) ?? null)
     // Editing back to the saved content (e.g. undo) clears the draft.
-    if (baseSha && baseSha === this.shaOf(path) && this.savedContent.get(path) === content) {
+    if (baseHash && baseHash === this.shaOf(path) && this.savedContent.get(path) === content) {
       if (existing) {
         this.clearDraft(path)
         this.emit()
       }
       return
     }
-    const draft: Draft = { repoKey: this.repoKey, path, content, baseSha, updatedAt: Date.now() }
+    const draft: Draft = { repoKey: this.repoKey, path, content, baseHash, updatedAt: Date.now() }
     this.drafts.set(path, draft)
     useRepo.setState((s) => (s.dirty[path] ? s : { dirty: { ...s.dirty, [path]: true } }))
     this.saver.notifyChange()
     await this.cache.putDraft(draft)
     this.emit()
-  }
-
-  private remoteSha(path: string): string | undefined {
-    return this.remote?.entries.find((e) => e.path === path)?.sha
   }
 
   private clearDraft(path: string) {
@@ -302,38 +348,35 @@ export class RepoSession {
     void this.cache.deleteDraft(this.repoKey, path)
   }
 
-  /** Commit all drafts as one commit. Used by the auto-saver. */
+  /** Save all drafts to Drive in one batch. Used by the auto-saver. */
   async flushDrafts(): Promise<{ remaining: number }> {
     const batch = [...this.drafts.values()]
     if (batch.length === 0) return { remaining: 0 }
-    const changes: Change[] = batch.map((d) => ({ path: d.path, content: d.content, baseSha: d.baseSha }))
-    const result = await this.commit(
-      changes,
-      describeChanges(
-        'Update',
-        batch.map((d) => d.path),
-      ),
-    )
-    const written = new Map(result.written.map((w) => [w.content, w.sha]))
+    const ops: DriveOp[] = batch.map((d) => ({
+      kind: 'write',
+      path: d.path,
+      content: d.content,
+      base: d.baseHash,
+    }))
+    const result = await this.run(ops)
+    const saved = new Set(result.saved)
+    const conflicted = new Set(result.conflicts.map((c) => c.path))
     for (const d of batch) {
       const current = this.drafts.get(d.path)
-      if (!current) continue
+      if (!current || !saved.has(d.path)) continue
       if (current.updatedAt === d.updatedAt) {
         this.clearDraft(d.path)
       } else {
-        // Edited while saving: keep the newer draft, now based on what we just wrote.
-        const conflicted = result.conflicts.some((c) => c.path === d.path)
-        const newBase = conflicted
-          ? (this.remoteSha(d.path) ?? null)
-          : (written.get(d.content) ?? current.baseSha)
-        current.baseSha = newBase
+        // Edited while saving: keep the newer draft, now based on what is in Drive.
+        current.baseHash = conflicted.has(d.path) ? (this.shaOf(d.path) ?? null) : md5Hex(d.content)
         await this.cache.putDraft(current)
       }
     }
     for (const c of result.conflicts) {
-      notify(`"${c.path}" was changed elsewhere. Your version was saved as "${c.copyPath}".`, 'error')
+      notify(`"${c.path}" was changed on another device. Your version was saved as "${c.copyPath}".`, 'error')
     }
     this.emit()
+    if (result.error) throw result.error
     return { remaining: this.drafts.size }
   }
 
@@ -341,65 +384,76 @@ export class RepoSession {
   async flushPending(): Promise<void> {
     if (this.drafts.size === 0) return
     await this.saver.saveNow()
-    if (this.drafts.size > 0) {
-      throw new Error(this.saver.lastError ?? 'Unsaved changes could not be saved.')
-    }
+    if (this.drafts.size > 0) throw new Error(this.saver.lastError ?? 'Unsaved changes could not be saved.')
   }
 
-  // ---------------------------------------------------------------- committing
+  // ---------------------------------------------------------------- writing
 
-  /** Serialized commit on top of the latest remote snapshot. */
-  commit(changes: Change[], message: string): Promise<CommitResult> {
-    const run = async () => {
-      if (!this.remote) throw new Error('Repository not loaded yet.')
-      let result: CommitResult
+  /**
+   * Serialized: fetch the latest Drive state, then execute ops on it. Partial progress is kept
+   * (remote state reflects what succeeded); the first failure is returned in `result.error`.
+   */
+  run(
+    ops: DriveOp[],
+    opts: { onProgress?: (done: number, total: number) => void } = {},
+  ): Promise<ExecResult> {
+    return this.enqueue(async () => {
       try {
-        result = await commitChanges(this.client, this.remote, changes, message, { now: this.now })
+        await this.pull()
       } catch (e) {
-        if (isNetworkError(e)) useRepo.setState({ online: false })
+        this.noteError(e)
         throw e
       }
-      useRepo.setState({ online: true })
-      await Promise.all(result.written.map((w) => this.cache.putBlob(w.sha, w.content)))
+      const tree = this.remote!.clone()
+      const result = await executeOps(this.client, tree, ops, { now: this.now, onProgress: opts.onProgress })
+      if (result.error) this.noteError(result.error)
+      else useRepo.setState({ online: true, authRequired: false })
+      await Promise.all(result.written.map((w) => this.cache.putBlob(w.md5, w.content)))
       for (const w of result.written) this.savedContent.set(w.path, w.content)
-      await this.setRemote(result.snapshot, true)
+      await this.setRemote(tree, true)
       return result
-    }
-    const p = this.queue.then(run, run)
-    this.queue = p.catch(() => undefined)
-    return p
+    })
   }
 
   /**
-   * Commit a structural change (create/rename/delete) with optimistic UI:
-   * the tree updates immediately and rolls back if the commit fails.
+   * Structural change (create/rename/delete/icon) with optimistic UI: the tree updates immediately
+   * and rolls back to the real Drive state if the operation fails.
    */
-  async applyOptimistic(changes: Change[], message: string, onApplied?: () => void): Promise<CommitResult> {
-    const base = useRepo.getState().snapshot
-    if (base) {
-      const map = new Map(base.entries.map((e) => [e.path, e.sha]))
-      for (const c of changes) {
-        if (c.content === null) map.delete(c.path)
-        else if (typeof c.content === 'object') map.set(c.path, c.content.sha)
-        else {
-          const sha = await gitBlobSha(c.content)
-          await this.cache.putBlob(sha, c.content)
-          map.set(c.path, sha)
+  async applyOptimistic(ops: DriveOp[], onApplied?: () => void): Promise<ExecResult> {
+    const view = useRepo.getState().snapshot
+    if (view) {
+      for (const op of ops) {
+        if (op.kind === 'write' && typeof op.content === 'string') {
+          await this.cache.putBlob(md5Hex(op.content), op.content)
         }
       }
-      const optimistic = { ...base, entries: [...map].map(([path, sha]) => ({ path, sha })) }
-      this.showSnapshot(optimistic)
-      if (changes.some((c) => isMetaPath(c.path))) await this.loadMetas(optimistic)
+      this.show(applyOpsToEntries(view.entries, ops))
+      if (ops.some((o) => isMetaPath(o.path))) await this.loadMetas()
     }
     onApplied?.()
+    let result: ExecResult
     try {
-      return await this.commit(changes, message)
+      result = await this.run(ops)
     } catch (e) {
-      if (this.remote) {
-        this.showSnapshot(this.remote)
-        await this.loadMetas(this.remote)
-      }
+      if (this.remote) await this.setRemote(this.remote, false)
       throw e
+    }
+    if (result.error) throw result.error
+    return result
+  }
+
+  /** Upload local files into a folder (keeping structure). Returns the number of files imported. */
+  async importFiles(folder: string, files: ImportFile[]): Promise<{ imported: number; failed: boolean }> {
+    const op = importOp(folder, files, this.remote?.entries() ?? [])
+    if (!op.ops.length) return { imported: 0, failed: false }
+    useRepo.setState({ importing: { done: 0, total: op.ops.length } })
+    try {
+      const result = await this.run(op.ops, {
+        onProgress: (done, total) => useRepo.setState({ importing: { done, total } }),
+      })
+      return { imported: result.saved.length, failed: !!result.error }
+    } finally {
+      useRepo.setState({ importing: null })
     }
   }
 }

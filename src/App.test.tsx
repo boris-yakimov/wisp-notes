@@ -1,11 +1,11 @@
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { setupFakeGitHub } from './test/msw.ts'
+import { setupFakeDrive } from './test/msw.ts'
 import { getEditorView, pressKey, renderApp, typeInEditor } from './test/renderApp.tsx'
 import { loadSettings } from './settings/settings.ts'
 import { useUi } from './store/ui.ts'
 
-const fake = setupFakeGitHub({
+const fake = setupFakeDrive({
   files: {
     'Inbox.md': '# Inbox\n\nCafé ☕ and 🎉',
     'Work/Plan.md': 'The plan',
@@ -18,9 +18,16 @@ beforeEach(() => useUi.setState({ expanded: {}, vimMode: null }))
 const editorText = () => getEditorView().state.doc.toString()
 
 describe('App: open notes (T4)', () => {
-  it('redirects to settings when not configured', async () => {
-    renderApp('/', { token: '' })
-    expect(await screen.findByRole('heading', { name: 'Connect to GitHub' })).toBeInTheDocument()
+  it('redirects to sign-in when signed out', async () => {
+    renderApp('/', {}, { signedIn: false })
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('signs in with Google and shows the notes', async () => {
+    renderApp('/', {}, { signedIn: false })
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' }))
+    expect(await screen.findByRole('link', { name: 'Inbox' })).toBeInTheDocument()
+    expect(loadSettings().account).toEqual({ email: 'me@example.com', name: 'Me' })
   })
 
   it('opens a note from the sidebar with UTF-8 content', async () => {
@@ -40,30 +47,33 @@ describe('App: open notes (T4)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('This note does not exist.')
   })
 
-  it('shows an error state when GitHub rejects the token', async () => {
-    renderApp('/', { token: 'bad' })
-    expect(await screen.findByRole('alert')).toHaveTextContent('The token is invalid or expired.')
+  it('asks to continue when the Google sign-in expired, then loads', async () => {
+    renderApp('/', {}, { token: false })
+    const banner = await screen.findByText(/Google sign-in expired/)
+    expect(banner).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue as me@example.com' }))
+    expect(await screen.findByRole('link', { name: 'Inbox' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText(/Google sign-in expired/)).not.toBeInTheDocument())
   })
 })
 
 describe('App: editing and saving (T6/T7)', () => {
-  it('Ctrl+S commits the edit to GitHub', async () => {
+  it('Ctrl+S saves the edit to Google Drive', async () => {
     renderApp('/n/Inbox.md', { vim: false })
     await waitFor(() => expect(editorText()).toContain('Café'))
     act(() => typeInEditor('\nmore'))
     expect(await screen.findByRole('status', { name: 'Save status: Unsaved' })).toBeInTheDocument()
     act(() => pressKey('s', { ctrlKey: true }))
-    await waitFor(() => expect(fake.gh.files()['Inbox.md']).toBe('# Inbox\n\nCafé ☕ and 🎉\nmore'))
+    await waitFor(() => expect(fake.drive.files()['Inbox.md']).toBe('# Inbox\n\nCafé ☕ and 🎉\nmore'))
     await waitFor(() =>
       expect(screen.getByRole('status', { name: 'Save status: Saved' })).toBeInTheDocument(),
     )
-    expect(fake.gh.commitCount()).toBe(2)
   })
 
   it('reloads the open note when it changes remotely and has no local edits', async () => {
     renderApp('/n/Work/Plan.md', { vim: false })
     await waitFor(() => expect(editorText()).toBe('The plan'))
-    fake.gh.pushExternal({ 'Work/Plan.md': 'The new plan' })
+    fake.drive.write('Work/Plan.md', 'The new plan')
     window.dispatchEvent(new Event('online'))
     await waitFor(() => expect(editorText()).toBe('The new plan'))
   })
@@ -100,7 +110,7 @@ describe('App: vim mode (T8)', () => {
     act(() => {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }))
     })
-    await waitFor(() => expect(fake.gh.files()['Inbox.md']).toBe('\nCafé ☕ and 🎉'))
+    await waitFor(() => expect(fake.drive.files()['Inbox.md']).toBe('\nCafé ☕ and 🎉'))
   })
 
   it('can be turned off and the setting persists', async () => {
@@ -111,16 +121,12 @@ describe('App: vim mode (T8)', () => {
   })
 })
 
-describe('App: empty repository (T13)', () => {
+describe('App: empty notes folder', () => {
   it('shows onboarding with create actions', async () => {
-    fake.gh.pushExternal({
-      'Inbox.md': null,
-      'Work/Plan.md': null,
-      'Work/_meta.json': null,
-      'README.md': '# hi',
-    })
+    for (const p of ['Inbox.md', 'Work/Plan.md', 'Work/_meta.json']) fake.drive.write(p, null)
     renderApp('/')
-    expect(await screen.findByRole('heading', { name: 'Your notes repository is empty' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'No notes yet' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import a folder' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create a note' })).toBeInTheDocument()
   })
 })

@@ -1,4 +1,4 @@
-import { isNetworkError } from '../github/errors.ts'
+import { isNetworkError } from '../drive/errors.ts'
 
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'offline' | 'error'
 
@@ -8,7 +8,7 @@ export interface FlushOutcome {
 }
 
 export interface AutoSaverOptions {
-  /** Commit after this much idle time since the last change. */
+  /** Save after this much idle time since the last change. */
   idleMs?: number
   /** While typing continuously, commit at least this often. */
   maxMs?: number
@@ -19,8 +19,8 @@ export interface AutoSaverOptions {
 }
 
 /**
- * Debounced save scheduler. Knows nothing about GitHub: `flush` does the work
- * (batch all dirty drafts into one commit). Handles idle debounce, max interval,
+ * Debounced save scheduler. Knows nothing about Drive: `flush` does the work
+ * (save all dirty drafts in one batch). Handles idle debounce, max interval,
  * serialization (never two flushes at once) and retry with exponential backoff.
  */
 export class AutoSaver {
@@ -55,7 +55,7 @@ export class AutoSaver {
     this.retryMaxMs = opts.retryMaxMs ?? 60_000
   }
 
-  /** True while there are changes not yet committed. */
+  /** True while there are changes not yet saved. */
   get hasPending(): boolean {
     return this.pending || this.status === 'saving'
   }

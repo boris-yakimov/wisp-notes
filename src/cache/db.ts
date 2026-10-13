@@ -1,33 +1,39 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import type { Snapshot } from '../github/client.ts'
+import type { RemoteState } from '../drive/remoteTree.ts'
 
 /** Unsaved local edit of a note. Persisted on every change so nothing is lost on tab close. */
 export interface Draft {
   repoKey: string
   path: string
   content: string
-  /** Blob SHA of the file when editing started (null = new file). Used for conflict detection. */
-  baseSha: string | null
+  /** Content hash of the file when editing started (null = new file). Used for conflict detection. */
+  baseHash: string | null
   updatedAt: number
 }
 
 interface WispDB extends DBSchema {
-  /** Last known remote snapshot per repo (keyed by repoKey). */
-  snapshots: { key: string; value: Snapshot & { repoKey: string } }
-  /** Blob contents keyed by SHA. Content-addressed, so never stale. */
+  /** Last known remote Drive state per account (keyed by repoKey). */
+  snapshots: { key: string; value: RemoteState & { repoKey: string } }
+  /** File contents keyed by MD5. Content-addressed, so never stale. */
   blobs: { key: string; value: { sha: string; content: string } }
   drafts: { key: [string, string]; value: Draft; indexes: { byRepo: string } }
 }
 
 export class Cache {
   private db: IDBPDatabase<WispDB>
+  private closed = false
+
   private constructor(db: IDBPDatabase<WispDB>) {
     this.db = db
   }
 
   static async open(name = 'wisp-notes'): Promise<Cache> {
-    const db = await openDB<WispDB>(name, 1, {
-      upgrade(db) {
+    const db = await openDB<WispDB>(name, 2, {
+      upgrade(db, oldVersion) {
+        // v1 held GitHub data: start fresh.
+        if (oldVersion < 2) {
+          for (const s of [...db.objectStoreNames]) db.deleteObjectStore(s)
+        }
         db.createObjectStore('snapshots', { keyPath: 'repoKey' })
         db.createObjectStore('blobs', { keyPath: 'sha' })
         const drafts = db.createObjectStore('drafts', { keyPath: ['repoKey', 'path'] })
@@ -36,8 +42,6 @@ export class Cache {
     })
     return new Cache(db)
   }
-
-  private closed = false
 
   close(): void {
     this.closed = true
@@ -55,29 +59,29 @@ export class Cache {
     }
   }
 
-  async getSnapshot(repoKey: string): Promise<Snapshot | undefined> {
+  async getSnapshot(repoKey: string): Promise<RemoteState | undefined> {
     const v = await this.guard(() => this.db.get('snapshots', repoKey), undefined)
     if (!v) return undefined
-    return { commitSha: v.commitSha, treeSha: v.treeSha, entries: v.entries }
+    return { rootId: v.rootId, changeToken: v.changeToken, items: v.items }
   }
 
-  async putSnapshot(repoKey: string, s: Snapshot): Promise<void> {
-    const value = { repoKey, commitSha: s.commitSha, treeSha: s.treeSha, entries: s.entries }
+  async putSnapshot(repoKey: string, s: RemoteState): Promise<void> {
+    const value = { repoKey, rootId: s.rootId, changeToken: s.changeToken, items: s.items }
     await this.guard(() => this.db.put('snapshots', value), '')
   }
 
-  async getBlob(sha: string): Promise<string | undefined> {
-    return (await this.guard(() => this.db.get('blobs', sha), undefined))?.content
+  async getBlob(hash: string): Promise<string | undefined> {
+    return (await this.guard(() => this.db.get('blobs', hash), undefined))?.content
   }
 
-  async putBlob(sha: string, content: string): Promise<void> {
-    await this.guard(() => this.db.put('blobs', { sha, content }), '')
+  async putBlob(hash: string, content: string): Promise<void> {
+    await this.guard(() => this.db.put('blobs', { sha: hash, content }), '')
   }
 
-  /** Which of the given SHAs are already cached. */
-  async cachedShas(shas: string[]): Promise<Set<string>> {
+  /** Which of the given hashes are already cached. */
+  async cachedShas(hashes: string[]): Promise<Set<string>> {
     const keys = new Set<string>(await this.guard(() => this.db.getAllKeys('blobs'), []))
-    return new Set(shas.filter((s) => keys.has(s)))
+    return new Set(hashes.filter((s) => keys.has(s)))
   }
 
   async getDrafts(repoKey: string): Promise<Draft[]> {
@@ -90,5 +94,18 @@ export class Cache {
 
   async deleteDraft(repoKey: string, path: string): Promise<void> {
     await this.guard(() => this.db.delete('drafts', [repoKey, path]), undefined)
+  }
+
+  /** Remove everything stored locally (sign out). */
+  async clearAll(): Promise<void> {
+    await this.guard(async () => {
+      const tx = this.db.transaction(['snapshots', 'blobs', 'drafts'], 'readwrite')
+      await Promise.all([
+        tx.objectStore('snapshots').clear(),
+        tx.objectStore('blobs').clear(),
+        tx.objectStore('drafts').clear(),
+        tx.done,
+      ])
+    }, undefined)
   }
 }

@@ -33,7 +33,11 @@ function NoteView({ path }: { path: string }) {
   const highlight = (location.state as NoteNavState | null)?.highlight
   const editor = useRef<EditorHandle>(null)
   const [load, setLoad] = useState<Load>({ state: 'loading' })
-  const sha = useRepo((s) => s.snapshot?.entries.find((e) => e.path === path)?.sha)
+  // Content version of the note (hash, or temporary ID while it's being created); undefined = missing.
+  const sha = useRepo((s) => {
+    const e = s.snapshot?.entries.find((x) => x.path === path && !x.folder)
+    return e ? (e.md5 ?? e.id) : undefined
+  })
   const hasSnapshot = useRepo((s) => s.snapshot !== null)
   const exists = sha !== undefined
 

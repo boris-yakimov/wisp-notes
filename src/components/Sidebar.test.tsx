@@ -8,7 +8,7 @@ import { Sidebar } from './Sidebar.tsx'
 function setRepo(paths: string[], metas = {}) {
   useRepo.setState({
     phase: 'ready',
-    snapshot: { commitSha: 'c', treeSha: 't', entries: paths.map((path) => ({ path, sha: path })) },
+    snapshot: { entries: paths.map((path) => ({ path, id: path, folder: false, md5: path })) },
     metas,
     dirty: {},
   })

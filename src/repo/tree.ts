@@ -42,11 +42,16 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'bas
 /**
  * Build the nested folder tree from flat repo file paths.
  * - Only `.md` files become notes; other files are ignored.
- * - A folder is shown if it (transitively) contains a note or has a `_meta.json`.
+ * - Folders listed in `folderPaths` are always shown (Drive has real, possibly empty, folders);
+ *   other folders appear if they contain a note or a `_meta.json`.
  * - Hidden paths (segments starting with '.') are ignored.
  * - Folders first, then notes; each alphabetical (case-insensitive, numeric-aware).
  */
-export function buildTree(paths: Iterable<string>, metas: Record<string, FolderMeta> = {}): FolderNode {
+export function buildTree(
+  paths: Iterable<string>,
+  metas: Record<string, FolderMeta> = {},
+  folderPaths: Iterable<string> = [],
+): FolderNode {
   const root: FolderNode = {
     kind: 'folder',
     path: '',
@@ -74,6 +79,9 @@ export function buildTree(paths: Iterable<string>, metas: Record<string, FolderM
     return node
   }
 
+  for (const path of folderPaths) {
+    if (path && !isHidden(path)) ensureFolder(path)
+  }
   for (const path of paths) {
     if (isHidden(path)) continue
     if (isNotePath(path)) {
@@ -90,13 +98,4 @@ export function buildTree(paths: Iterable<string>, metas: Record<string, FolderM
   }
   sort(root)
   return root
-}
-
-/** All folder paths present in the tree (excluding root). */
-export function folderPaths(paths: Iterable<string>): Set<string> {
-  const out = new Set<string>()
-  for (const p of paths) {
-    for (let d = dirname(p); d; d = dirname(d)) out.add(d)
-  }
-  return out
 }

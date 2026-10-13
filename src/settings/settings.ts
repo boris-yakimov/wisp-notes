@@ -1,10 +1,13 @@
 /** Settings persisted per device in localStorage. */
 
+export interface Account {
+  email: string
+  name: string
+}
+
 export interface Settings {
-  token: string
-  owner: string
-  repo: string
-  branch: string
+  /** Google account the local data belongs to; null = signed out. */
+  account: Account | null
   vim: boolean
   livePreview: boolean
 }
@@ -12,10 +15,7 @@ export interface Settings {
 const KEY = 'wisp-notes:settings'
 
 export const defaultSettings: Settings = {
-  token: '',
-  owner: '',
-  repo: '',
-  branch: 'main',
+  account: null,
   vim: true,
   livePreview: true,
 }
@@ -24,7 +24,10 @@ export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return { ...defaultSettings }
-    return { ...defaultSettings, ...(JSON.parse(raw) as Partial<Settings>) }
+    const s = { ...defaultSettings, ...(JSON.parse(raw) as Partial<Settings>) }
+    // Settings from the GitHub version have no account.
+    if (!s.account || typeof s.account.email !== 'string') s.account = null
+    return { account: s.account, vim: s.vim, livePreview: s.livePreview }
   } catch {
     return { ...defaultSettings }
   }
@@ -35,10 +38,10 @@ export function saveSettings(s: Settings): void {
 }
 
 export function isConfigured(s: Settings): boolean {
-  return Boolean(s.token && s.owner && s.repo && s.branch)
+  return s.account !== null
 }
 
-/** Identifies a repo+branch; used as the cache namespace. */
-export function repoKey(s: Pick<Settings, 'owner' | 'repo' | 'branch'>): string {
-  return `${s.owner}/${s.repo}@${s.branch}`
+/** Cache namespace for an account. */
+export function repoKey(account: Account): string {
+  return `gdrive:${account.email}`
 }

@@ -4,6 +4,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
 import { resetCacheInstance } from '../cache/instance.ts'
+import { resetAuthForTests } from '../drive/auth.ts'
 
 // jsdom lacks these; CodeMirror and the UI store touch them.
 window.matchMedia ??= ((query: string) => ({
@@ -28,5 +29,7 @@ afterEach(async () => {
   cleanup()
   localStorage.clear()
   await resetCacheInstance()
+  resetAuthForTests()
+  delete window.google
   globalThis.indexedDB = new IDBFactory()
 })

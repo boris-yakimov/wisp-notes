@@ -19,7 +19,14 @@ export function Sidebar({ onMenu, onNewNote, header }: TreeActions & { header?: 
   const snapshot = useRepo((s) => s.snapshot)
   const metas = useRepo((s) => s.metas)
   const phase = useRepo((s) => s.phase)
-  const root = useMemo(() => buildTree(snapshot?.entries.map((e) => e.path) ?? [], metas), [snapshot, metas])
+  const root = useMemo(() => {
+    const entries = snapshot?.entries ?? []
+    return buildTree(
+      entries.filter((e) => !e.folder).map((e) => e.path),
+      metas,
+      entries.filter((e) => e.folder).map((e) => e.path),
+    )
+  }, [snapshot, metas])
   const actions = useMemo(() => ({ onMenu, onNewNote }), [onMenu, onNewNote])
 
   return (

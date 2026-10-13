@@ -11,6 +11,7 @@ import {
   renameFolderOp,
   renameNoteOp,
   setFolderIconOp,
+  type ImportFile,
   type Op,
 } from '../repo/ops.ts'
 import { useSession } from '../repo/SessionContext.ts'
@@ -39,7 +40,7 @@ export function useTreeActions() {
 
   const entries = () => useRepo.getState().snapshot?.entries ?? []
 
-  /** Run an op: save affected drafts first, commit optimistically, follow moved/deleted open note. */
+  /** Run an op: save affected drafts first, apply optimistically, follow moved/deleted open note. */
   const run = useCallback(
     async (build: () => Op, verb: string, afterApply?: (op: Op) => void) => {
       let op: Op
@@ -49,9 +50,9 @@ export function useTreeActions() {
         notify(e instanceof OpError ? e.message : String(e), 'error')
         return false
       }
-      if (!op.changes.length) return true
-      const dirty = useRepo.getState().dirty
-      if (op.changes.some((c) => dirty[c.path])) {
+      if (!op.ops.length) return true
+      const dirty = Object.keys(useRepo.getState().dirty)
+      if (dirty.some((d) => op.ops.some((o) => isInside(d, o.path)))) {
         try {
           await session.flushPending()
         } catch (e) {
@@ -63,9 +64,9 @@ export function useTreeActions() {
         }
       }
       try {
-        await session.applyOptimistic(op.changes, op.message, () => {
+        await session.applyOptimistic(op.ops, () => {
           if (open && op.moved?.[open]) navigate(notePathToUrl(op.moved[open]!), { replace: true })
-          else if (open && op.changes.some((c) => c.path === open && c.content === null))
+          else if (open && op.ops.some((o) => o.kind === 'trash' && isInside(open, o.path)))
             navigate('/', { replace: true })
           afterApply?.(op)
         })
@@ -83,7 +84,7 @@ export function useTreeActions() {
       const name = await promptDialog({ title: 'New note', label: 'Name', confirmLabel: 'Create' })
       if (!name) return
       await run(
-        () => createNoteOp(folder, name, (p) => session.exists(p)),
+        () => createNoteOp(folder, name, entries()),
         'create the note',
         (op) => {
           if (folder) setExpanded(folder, true)
@@ -91,7 +92,7 @@ export function useTreeActions() {
         },
       )
     },
-    [run, session, navigate, setExpanded],
+    [run, navigate, setExpanded],
   )
 
   const newFolder = useCallback(
@@ -139,8 +140,8 @@ export function useTreeActions() {
       const ok = await confirmDialog({
         title: isNote ? 'Delete note?' : 'Delete folder?',
         message: isNote
-          ? `“${noteTitle(node.path)}” will be deleted. It stays recoverable from the Git history on GitHub.`
-          : `“${node.name}” and the ${n} note${n === 1 ? '' : 's'} inside will be deleted. They stay recoverable from the Git history on GitHub.`,
+          ? `“${noteTitle(node.path)}” will be deleted. It moves to the Google Drive trash (recoverable for 30 days).`
+          : `“${node.name}” and the ${n} note${n === 1 ? '' : 's'} inside will be deleted. They move to the Google Drive trash (recoverable for 30 days).`,
         confirmLabel: 'Delete',
         danger: true,
       })
@@ -164,5 +165,21 @@ export function useTreeActions() {
     [run],
   )
 
-  return { newNote, newFolder, rename, remove, changeIcon }
+  /** Upload local files (keeping folder structure) into a folder. */
+  const importFiles = useCallback(
+    async (folder: string, files: ImportFile[]) => {
+      if (!files.length) return
+      try {
+        const { imported, failed } = await session.importFiles(folder, files)
+        if (folder) setExpanded(folder, true)
+        if (failed) notify(`Imported ${imported} of ${files.length} files. Some failed; try again.`, 'error')
+        else notify(`Imported ${imported} file${imported === 1 ? '' : 's'}.`)
+      } catch (e) {
+        notify(`Import failed: ${(e as Error).message}`, 'error')
+      }
+    },
+    [session, setExpanded],
+  )
+
+  return { newNote, newFolder, rename, remove, changeIcon, importFiles }
 }

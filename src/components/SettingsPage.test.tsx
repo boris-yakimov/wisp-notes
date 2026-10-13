@@ -1,62 +1,69 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SettingsPage } from './SettingsPage.tsx'
-import { useApp } from '../store/app.ts'
+import { getCache } from '../cache/instance.ts'
 import { defaultSettings, loadSettings } from '../settings/settings.ts'
-import { setupFakeGitHub } from '../test/msw.ts'
+import { useApp } from '../store/app.ts'
+import { installFakeGis, storeToken } from '../test/fakeGis.ts'
+import { setupFakeDrive } from '../test/msw.ts'
+import { DialogHost } from './DialogHost.tsx'
+import { SettingsPage } from './SettingsPage.tsx'
 
-const fake = setupFakeGitHub({ files: { 'a.md': 'x' } })
+const fake = setupFakeDrive({ noRoot: true })
 
-async function fill(token: string, repo = 'notes') {
-  const user = userEvent.setup()
-  await user.type(screen.getByLabelText('Personal access token'), token)
-  await user.type(screen.getByLabelText('Owner'), 'me')
-  await user.type(screen.getByLabelText('Repository'), repo)
-  await user.click(screen.getByRole('button', { name: 'Connect' }))
-}
+const renderPage = (onConnected = vi.fn()) =>
+  render(
+    <>
+      <SettingsPage onConnected={onConnected} />
+      <DialogHost />
+    </>,
+  )
 
 describe('SettingsPage', () => {
   beforeEach(() => useApp.setState({ settings: { ...defaultSettings } }))
 
-  it('connects and persists settings', async () => {
+  it('signs in, creates the Wisp Notes folder and persists the account', async () => {
+    installFakeGis()
     const onConnected = vi.fn()
-    render(<SettingsPage onConnected={onConnected} />)
-    await fill('good-token')
-    expect(await screen.findByText('Connected to me/notes')).toBeInTheDocument()
-    expect(onConnected).toHaveBeenCalled()
-    expect(loadSettings()).toMatchObject({ token: 'good-token', owner: 'me', repo: 'notes', branch: 'main' })
+    renderPage(onConnected)
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }))
+    await vi.waitFor(() => expect(onConnected).toHaveBeenCalled())
+    expect(loadSettings().account).toEqual({ email: 'me@example.com', name: 'Me' })
+    expect(fake.drive.rootId).not.toBeNull()
+    expect(screen.getByText('Signed in as me@example.com')).toBeInTheDocument()
   })
 
-  it('shows a clear error for a bad token and does not persist', async () => {
-    render(<SettingsPage />)
-    await fill('bad')
-    expect(await screen.findByRole('alert')).toHaveTextContent('The token is invalid or expired.')
-    expect(loadSettings().token).toBe('')
+  it('does nothing when the popup is closed', async () => {
+    installFakeGis({ cancel: true })
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(loadSettings().account).toBeNull()
   })
 
-  it('shows an error for a missing repo', async () => {
-    render(<SettingsPage />)
-    await fill('good-token', 'other')
-    expect(await screen.findByRole('alert')).toHaveTextContent('Repository or branch not found')
+  it('shows a clear error when Drive access is not granted', async () => {
+    installFakeGis({ denyScope: true })
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Google Drive access was not granted')
   })
 
-  it('requires all fields', async () => {
-    render(<SettingsPage />)
-    await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('All fields are required.')
-  })
-
-  it('offers to initialize an empty repository', async () => {
-    fake.gh.refs.clear()
-    render(<SettingsPage />)
-    await fill('good-token')
-    await userEvent.click(await screen.findByRole('button', { name: 'Initialize repository' }))
-    expect(await screen.findByText('Connected to me/notes')).toBeInTheDocument()
-    expect(fake.gh.files()['README.md']).toContain('Wisp Notes')
+  it('signs out after confirmation and clears local data', async () => {
+    const gis = installFakeGis()
+    storeToken('tok')
+    useApp.getState().updateSettings({ account: { email: 'me@example.com', name: 'Me' } })
+    const cache = await getCache()
+    await cache.putBlob('h', 'secret')
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sign out' }))
+    await vi.waitFor(() => expect(loadSettings().account).toBeNull())
+    expect(gis.revoked).toEqual(['tok'])
+    expect(await cache.getBlob('h')).toBeUndefined()
   })
 
   it('toggles and persists editor preferences', async () => {
-    render(<SettingsPage />)
+    installFakeGis()
+    renderPage()
     await userEvent.click(screen.getByLabelText('Vim mode'))
     expect(loadSettings().vim).toBe(false)
   })
