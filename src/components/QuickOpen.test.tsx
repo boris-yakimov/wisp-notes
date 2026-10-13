@@ -35,7 +35,8 @@ describe('quick open (T12)', () => {
 
   it('opens from the sidebar search button', async () => {
     renderApp('/')
-    await userEvent.click(await screen.findByRole('button', { name: /Search/ }))
+    const nav = await screen.findByRole('navigation', { name: 'Notes' })
+    await userEvent.click(within(nav).getByRole('button', { name: /^Search/ }))
     expect(screen.getByRole('combobox', { name: 'Search notes' })).toBeInTheDocument()
   })
 

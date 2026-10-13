@@ -1,7 +1,8 @@
-import { AlertCircle, Settings as SettingsIcon } from 'lucide-react'
+import { ArrowLeft, Settings as SettingsIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate } from 'react-router'
 import { AppShell } from './components/AppShell.tsx'
+import { Home } from './components/Home.tsx'
 import { NotePage } from './components/NotePage.tsx'
 import { SettingsPage } from './components/SettingsPage.tsx'
 import { NotesSidebar } from './components/NotesSidebar.tsx'
@@ -12,7 +13,6 @@ import { useUi } from './store/ui.ts'
 import { Notices, SaveStatus, StatusBar } from './components/StatusBar.tsx'
 import { SessionProvider } from './components/Workspace.tsx'
 import type { RepoSession } from './repo/session.ts'
-import { useRepo } from './repo/session.ts'
 import { isConfigured } from './settings/settings.ts'
 import { useApp } from './store/app.ts'
 
@@ -36,7 +36,13 @@ export default function App() {
         element={
           <AppShell
             sidebar={null}
-            topBarRight={<SettingsLink />}
+            topBarRight={
+              configured ? (
+                <Link to="/" aria-label="Back to notes" className={iconBtn}>
+                  <ArrowLeft size={18} />
+                </Link>
+              ) : null
+            }
             main={<SettingsPage onConnected={() => setTimeout(() => navigate('/'), 600)} />}
           />
         }
@@ -111,26 +117,4 @@ function useGlobalShortcuts(session: RepoSession) {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [session])
-}
-
-function Home() {
-  const phase = useRepo((s) => s.phase)
-  const error = useRepo((s) => s.error)
-  if (phase === 'error') {
-    return (
-      <div
-        role="alert"
-        className="m-8 flex items-start gap-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800"
-      >
-        <AlertCircle size={16} className="mt-0.5 shrink-0" />
-        <div>
-          <p>{error}</p>
-          <Link to="/settings" className="underline">
-            Check settings
-          </Link>
-        </div>
-      </div>
-    )
-  }
-  return <div className="p-8 text-neutral-500">Select a note from the sidebar.</div>
 }

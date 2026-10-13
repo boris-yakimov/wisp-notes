@@ -110,3 +110,17 @@ describe('App: vim mode (T8)', () => {
     expect(loadSettings().vim).toBe(false)
   })
 })
+
+describe('App: empty repository (T13)', () => {
+  it('shows onboarding with create actions', async () => {
+    fake.gh.pushExternal({
+      'Inbox.md': null,
+      'Work/Plan.md': null,
+      'Work/_meta.json': null,
+      'README.md': '# hi',
+    })
+    renderApp('/')
+    expect(await screen.findByRole('heading', { name: 'Your notes repository is empty' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create a note' })).toBeInTheDocument()
+  })
+})
