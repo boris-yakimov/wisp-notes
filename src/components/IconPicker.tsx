@@ -1,5 +1,6 @@
 import { DynamicIcon, iconNames, type IconName } from 'lucide-react/dynamic'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { IconUploadError, imageFileToIcon, isCustomIcon } from './customIcon.ts'
 import { filterIcons } from './iconSearch.ts'
 
 interface Props {
@@ -13,6 +14,23 @@ interface Props {
 export default function IconPicker({ current, onPick, onCancel }: Props) {
   const [query, setQuery] = useState('')
   const matches = useMemo(() => filterIcons(iconNames, query), [query])
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return
+    setUploadError(null)
+    setUploading(true)
+    try {
+      onPick(await imageFileToIcon(file))
+    } catch (e) {
+      setUploadError(e instanceof IconUploadError ? e.message : 'This image could not be used.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div>
       <input
@@ -51,7 +69,35 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
       {matches.length === 0 && (
         <p className="py-4 text-center text-sm text-neutral-500">No icons match “{query}”.</p>
       )}
-      <div className="mt-3 flex justify-between">
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*"
+        hidden
+        data-testid="icon-upload"
+        onChange={(e) => {
+          void upload(e.target.files?.[0])
+          e.target.value = '' // picking the same file again still fires change
+        }}
+      />
+      {uploadError && (
+        <p role="alert" className="mt-3 text-sm text-red-700">
+          {uploadError}
+        </p>
+      )}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-2 rounded px-3 py-1.5 text-sm hover:bg-neutral-100 disabled:opacity-40"
+        >
+          {isCustomIcon(current) && (
+            <img src={current} alt="" width={18} height={18} className="rounded-sm" />
+          )}
+          {uploading ? 'Uploading…' : 'Upload image…'}
+        </button>
+        <span className="flex-1" />
         <button
           type="button"
           onClick={() => onPick(null)}

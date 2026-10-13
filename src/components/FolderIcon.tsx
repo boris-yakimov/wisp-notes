@@ -1,5 +1,6 @@
 import { FileText, Folder, FolderOpen } from 'lucide-react'
 import { DynamicIcon } from 'lucide-react/dynamic'
+import { isCustomIcon } from './customIcon.ts'
 import { isIconName } from './icons.ts'
 
 interface Props {
@@ -11,9 +12,22 @@ interface Props {
   className?: string
 }
 
-/** Lucide icon by name, loaded lazily (one small chunk per icon). Falls back to a folder (or page) icon. */
+/** Uploaded image (data URL) or Lucide icon by name, loaded lazily (one small chunk per icon). Falls back to a folder (or page) icon. */
 export function FolderIcon({ name, open = false, note = false, size = 16, className }: Props) {
   const Fallback = note ? FileText : open ? FolderOpen : Folder
+  if (isCustomIcon(name))
+    return (
+      <img
+        src={name}
+        alt=""
+        width={size}
+        height={size}
+        className={`${className ?? ''} rounded-sm object-contain`}
+        aria-hidden
+        data-icon="custom"
+        draggable={false}
+      />
+    )
   if (!isIconName(name))
     return <Fallback size={size} className={className} aria-hidden data-icon={note ? 'note' : 'folder'} />
   return (

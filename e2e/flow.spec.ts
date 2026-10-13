@@ -192,3 +192,25 @@ test('drag a note onto another note to nest it as a sub-note', async ({ page, dr
   await recipes.getByRole('button', { name: 'Collapse Recipes' }).click()
   await expect(recipes).toHaveAttribute('aria-expanded', 'false')
 })
+
+test('upload an image as a note icon', async ({ page, drive }) => {
+  await signedIn(page, false)
+  await page.goto('/')
+  const nav = await ensureSidebar(page)
+  await nav.getByRole('button', { name: 'Actions for Inbox' }).click()
+  await page.getByRole('menuitem', { name: 'Change icon' }).click()
+  // 3×2 red PNG
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAYAAACddGYaAAAAEklEQVR4nGP4z8DwHxkzEC4AAA75Df+JXyZEAAAAAElFTkSuQmCC',
+    'base64',
+  )
+  await page
+    .getByTestId('icon-upload')
+    .setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png })
+  const img = nav.getByRole('treeitem', { name: 'Inbox' }).locator('img[data-icon="custom"]')
+  await expect(img).toBeVisible()
+  expect(await img.evaluate((el: HTMLImageElement) => [el.naturalWidth, el.naturalHeight])).toEqual([64, 64])
+  await expect
+    .poll(() => JSON.parse(drive.files()['_meta.json'] ?? '{}').notes?.['Inbox.md'] as string | undefined)
+    .toMatch(/^data:image\/png;base64,/)
+})

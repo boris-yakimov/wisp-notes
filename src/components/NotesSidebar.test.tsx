@@ -5,6 +5,19 @@ import { setupFakeDrive } from '../test/msw.ts'
 import { getEditorView, renderApp, typeInEditor } from '../test/renderApp.tsx'
 import { filterIcons } from './iconSearch.ts'
 
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=='
+// jsdom can't decode images or draw on a canvas; the real conversion runs in the e2e test.
+vi.mock('./customIcon.ts', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./customIcon.ts')>()
+  return {
+    ...real,
+    imageFileToIcon: async (f: File) => {
+      if (f.name === 'broken.png') throw new real.IconUploadError('This image could not be read.')
+      return PNG
+    },
+  }
+})
+
 const fake = setupFakeDrive({
   files: {
     'Inbox.md': 'inbox',
@@ -235,6 +248,59 @@ describe('folder icon picker (T11)', () => {
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Remove icon' }))
     await waitFor(() => expect(fake.drive.files()['Work/_meta.json']).toBe('{}\n'))
+  })
+})
+
+describe('uploaded icons', () => {
+  const pick = async (name: string) => {
+    const input = await screen.findByTestId('icon-upload')
+    await userEvent.upload(input, new File(['img'], name, { type: 'image/png' }))
+  }
+
+  it('uploads an image as a note icon', async () => {
+    renderApp('/')
+    const menu = await openMenu('Inbox')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
+    await pick('logo.png')
+    await waitFor(() =>
+      expect(JSON.parse(fake.drive.files()['_meta.json']!)).toEqual({ notes: { 'Inbox.md': PNG } }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('treeitem', { name: 'Inbox' }).querySelector('img[data-icon="custom"]'),
+      ).toHaveAttribute('src', PNG),
+    )
+  })
+
+  it('uploads an image as a folder icon', async () => {
+    renderApp('/')
+    const menu = await openMenu('Work', 'button')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
+    await pick('logo.png')
+    await waitFor(() => expect(JSON.parse(fake.drive.files()['Work/_meta.json']!)).toEqual({ icon: PNG }))
+  })
+
+  it('shows an error and keeps the dialog open if the image is unusable', async () => {
+    renderApp('/')
+    const menu = await openMenu('Inbox')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
+    await pick('broken.png')
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(
+      'could not be read',
+    )
+    expect(fake.drive.files()['_meta.json']).toBeUndefined()
+  })
+
+  it('ignores a tampered _meta.json icon that is not a safe image', async () => {
+    fake.drive.write(
+      '_meta.json',
+      JSON.stringify({ notes: { 'Inbox.md': 'data:image/svg+xml;base64,PHN2Zz4=' } }),
+    )
+    renderApp('/')
+    const inbox = await screen.findByRole('treeitem', { name: 'Inbox' })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(inbox.querySelector('img')).toBeNull()
+    expect(inbox.querySelector('svg[data-icon]')).toHaveAttribute('data-icon', 'note')
   })
 })
 
