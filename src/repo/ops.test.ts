@@ -11,6 +11,7 @@ import {
   renameFolderOp,
   renameNoteOp,
   setFolderIconOp,
+  setNoteIconOp,
 } from './ops.ts'
 
 const f = (path: string): Entry => ({ path, id: path, folder: false, md5: 'h' })
@@ -186,5 +187,43 @@ describe('operation builders', () => {
       'Work (2)/Plan.md',
     ])
     expect(op.ops.every((o) => o.kind === 'write' && o.base === null)).toBe(true)
+  })
+
+  describe("note icons (in the folder's _meta.json)", () => {
+    const metas = { Work: { icon: 'briefcase', notes: { 'Plan.md': 'star' } } }
+    const meta = (op: { ops: unknown[] }, i: number) => {
+      const o = op.ops[i] as { kind: string; path: string; content: string }
+      return [o.path, JSON.parse(o.content)]
+    }
+
+    it('setNoteIconOp sets and removes a note icon, keeping the folder icon', () => {
+      expect(meta(setNoteIconOp('Work/Sub/Deep.md', 'book', {}), 0)).toEqual([
+        'Work/Sub/_meta.json',
+        { notes: { 'Deep.md': 'book' } },
+      ])
+      expect(meta(setNoteIconOp('Work/Plan.md', undefined, metas), 0)).toEqual([
+        'Work/_meta.json',
+        { icon: 'briefcase' },
+      ])
+      expect(meta(setNoteIconOp('Inbox.md', 'inbox', {}), 0)).toEqual([
+        '_meta.json',
+        { notes: { 'Inbox.md': 'inbox' } },
+      ])
+    })
+
+    it('rename, move and delete carry the icon along', () => {
+      const renamed = renameNoteOp('Work/Plan.md', 'Roadmap', entries, metas)
+      expect(meta(renamed, 1)).toEqual([
+        'Work/_meta.json',
+        { icon: 'briefcase', notes: { 'Roadmap.md': 'star' } },
+      ])
+      const moved = moveOp('Work/Plan.md', 'Home', entries, metas)
+      expect(moved.ops[0]).toEqual({ kind: 'rename', path: 'Work/Plan.md', to: 'Home/Plan.md' })
+      expect(meta(moved, 1)).toEqual(['Work/_meta.json', { icon: 'briefcase' }])
+      expect(meta(moved, 2)).toEqual(['Home/_meta.json', { notes: { 'Plan.md': 'star' } }])
+      const deleted = deleteNoteOp('Work/Plan.md', entries, metas)
+      expect(meta(deleted, 1)).toEqual(['Work/_meta.json', { icon: 'briefcase' }])
+      expect(moveOp('Inbox.md', 'Home', entries, metas).ops).toHaveLength(1) // no icon: no meta write
+    })
   })
 })

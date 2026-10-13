@@ -1,4 +1,4 @@
-import { ChevronRight, FileText, MoreHorizontal, Plus } from 'lucide-react'
+import { ChevronRight, MoreHorizontal, Plus } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink } from 'react-router'
 import { childFolderOf, dirname, isInside, notePathToUrl } from '../repo/paths.ts'
@@ -289,7 +289,7 @@ function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
           {...menu}
           onKeyDown={onKeyDown}
         >
-          <FileText size={15} className="shrink-0 text-neutral-500" aria-hidden />
+          <FolderIcon name={note.icon} note size={15} className="shrink-0 text-neutral-500" />
           <span className="flex-1 truncate">{note.name}</span>
           {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Unsaved" />}
           {actions.onNewNote && (

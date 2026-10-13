@@ -12,7 +12,7 @@ import {
   noteTitle,
   validateName,
 } from './paths.ts'
-import { serializeMeta, type FolderMeta } from './tree.ts'
+import { serializeMeta, withNoteIcon, type FolderMeta } from './tree.ts'
 
 /**
  * Pure builders for note/folder operations. They validate input and return Drive ops;
@@ -74,6 +74,25 @@ function movedPaths(entries: Entry[], pairs: [string, string][]): Record<string,
   return moved
 }
 
+type Metas = Record<string, FolderMeta>
+
+const writeMeta = (folder: string, meta: FolderMeta): DriveOp =>
+  // No conflict check (base undefined): icons are tiny settings, last write wins.
+  ({ kind: 'write', path: metaPath(folder), content: serializeMeta(meta) })
+
+/** Meta writes that carry a note's icon from `from` to `to` (or drop it if `to` is null). */
+function moveNoteIcon(metas: Metas, from: string, to: string | null): DriveOp[] {
+  const icon = metas[dirname(from)]?.notes?.[basename(from)]
+  if (!icon) return []
+  const src = withNoteIcon(metas[dirname(from)] ?? {}, basename(from), undefined)
+  if (to === null) return [writeMeta(dirname(from), src)]
+  if (dirname(to) === dirname(from)) return [writeMeta(dirname(to), withNoteIcon(src, basename(to), icon))]
+  return [
+    writeMeta(dirname(from), src),
+    writeMeta(dirname(to), withNoteIcon(metas[dirname(to)] ?? {}, basename(to), icon)),
+  ]
+}
+
 /** Create a note in `folder`. For a sub-note, `folder` is the parent note's `childFolderOf`. */
 export function createNoteOp(folder: string, name: string, entries: Entry[]): Op {
   const path = joinPath(folder, noteFileName(name))
@@ -92,7 +111,7 @@ export function createFolderOp(parent: string, name: string, entries: Entry[]): 
 }
 
 /** Rename a note; its sub-notes folder is renamed with it. */
-export function renameNoteOp(path: string, newName: string, entries: Entry[]): Op {
+export function renameNoteOp(path: string, newName: string, entries: Entry[], metas: Metas = {}): Op {
   if (!find(entries, path)) throw new OpError('The note no longer exists.')
   const to = joinPath(dirname(path), noteFileName(newName))
   if (to === path) return { ops: [], target: path }
@@ -105,6 +124,7 @@ export function renameNoteOp(path: string, newName: string, entries: Entry[]): O
   const child = childFolder(entries, path)
   const ops: DriveOp[] = [{ kind: 'rename', path, to }]
   if (child) ops.push({ kind: 'rename', path: child, to: childFolderOf(to) })
+  ops.push(...moveNoteIcon(metas, path, to))
   return {
     ops,
     target: to,
@@ -121,10 +141,16 @@ export function renameNoteOp(path: string, newName: string, entries: Entry[]): O
 }
 
 /** Delete a note together with its sub-notes. */
-export function deleteNoteOp(path: string, entries: Entry[]): Op {
+export function deleteNoteOp(path: string, entries: Entry[], metas: Metas = {}): Op {
   if (!find(entries, path)) throw new OpError('The note no longer exists.')
   const child = childFolder(entries, path)
-  return { ops: [{ kind: 'trash', path }, ...(child ? [{ kind: 'trash' as const, path: child }] : [])] }
+  return {
+    ops: [
+      { kind: 'trash', path },
+      ...(child ? [{ kind: 'trash' as const, path: child }] : []),
+      ...moveNoteIcon(metas, path, null), // so a new note with the same name doesn't inherit it
+    ],
+  }
 }
 
 /** One Drive rename; everything inside moves with the folder. */
@@ -146,7 +172,7 @@ export function renameFolderOp(folder: string, newName: string, entries: Entry[]
  * Move a note or folder into another folder ('' = top level) or under a note (`childFolderOf(note)`),
  * keeping its name. A note's sub-notes move with it. One Drive request per moved item.
  */
-export function moveOp(path: string, toFolder: string, entries: Entry[]): Op {
+export function moveOp(path: string, toFolder: string, entries: Entry[], metas: Metas = {}): Op {
   const src = find(entries, path)
   if (!src) throw new OpError(`"${basename(path)}" no longer exists.`)
   if (!isContainer(entries, toFolder)) throw new OpError('The target no longer exists.')
@@ -163,7 +189,10 @@ export function moveOp(path: string, toFolder: string, entries: Entry[]): Op {
   const pairs: [string, string][] = [[path, to]]
   if (child) pairs.push([child, childFolderOf(to)])
   return {
-    ops: pairs.map(([p, t]) => ({ kind: 'rename' as const, path: p, to: t })),
+    ops: [
+      ...pairs.map(([p, t]) => ({ kind: 'rename' as const, path: p, to: t })),
+      ...(src.folder ? [] : moveNoteIcon(metas, path, to)),
+    ],
     target: to,
     moved: movedPaths(entries, pairs),
   }
@@ -196,8 +225,13 @@ export function setFolderIconOp(folder: string, icon: string | undefined, curren
   const meta: FolderMeta = { ...current }
   if (icon) meta.icon = icon
   else delete meta.icon
-  // No conflict check (base undefined): the icon is a tiny setting, last write wins.
-  return { ops: [{ kind: 'write', path: metaPath(folder), content: serializeMeta(meta) }] }
+  return { ops: [writeMeta(folder, meta)] }
+}
+
+/** A note's icon lives in its folder's `_meta.json` under `notes`. */
+export function setNoteIconOp(note: string, icon: string | undefined, metas: Metas): Op {
+  const folder = dirname(note)
+  return { ops: [writeMeta(folder, withNoteIcon(metas[folder] ?? {}, basename(note), icon))] }
 }
 
 /** Number of notes affected by deleting a folder (for the confirmation message). */

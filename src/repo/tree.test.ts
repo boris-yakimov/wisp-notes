@@ -58,6 +58,16 @@ describe('buildTree sub-notes', () => {
 })
 
 describe('parseMeta', () => {
+  it('parses note icons and drops invalid entries', () => {
+    expect(parseMeta('{"icon":"x","notes":{"A.md":"star","B.md":3}}')).toEqual({
+      icon: 'x',
+      notes: { 'A.md': 'star' },
+    })
+    const root = buildTree(['A.md', 'W/B.md'], { '': { notes: { 'A.md': 'star' } } })
+    expect(root.notes[0]!.icon).toBe('star')
+    expect(root.folders[0]!.notes[0]!.icon).toBeUndefined()
+  })
+
   it('parses icon, tolerates garbage', () => {
     expect(parseMeta('{"icon":"book-open"}')).toEqual({ icon: 'book-open' })
     expect(parseMeta('not json')).toEqual({})

@@ -2,12 +2,15 @@ import { basename, childFolderOf, dirname, isHidden, isMetaPath, isNotePath, not
 
 export interface FolderMeta {
   icon?: string
+  /** Icons of the notes in this folder, by file name ("Plan.md" → "star"). */
+  notes?: Record<string, string>
 }
 
 export interface NoteNode {
   kind: 'note'
   path: string
   name: string
+  icon: string | undefined
   /** Sub-notes: the folder next to the note with the same name ("Plan.md" + "Plan/"). */
   children?: FolderNode
 }
@@ -25,14 +28,32 @@ export interface FolderNode {
 export function parseMeta(text: string | undefined): FolderMeta {
   if (!text) return {}
   try {
-    const v: unknown = JSON.parse(text)
-    if (v && typeof v === 'object' && typeof (v as FolderMeta).icon === 'string') {
-      return { icon: (v as FolderMeta).icon }
+    const v = JSON.parse(text) as unknown
+    if (!v || typeof v !== 'object') return {}
+    const raw = v as { icon?: unknown; notes?: unknown }
+    const meta: FolderMeta = {}
+    if (typeof raw.icon === 'string') meta.icon = raw.icon
+    if (raw.notes && typeof raw.notes === 'object') {
+      const notes = Object.fromEntries(
+        Object.entries(raw.notes).filter((kv): kv is [string, string] => typeof kv[1] === 'string'),
+      )
+      if (Object.keys(notes).length) meta.notes = notes
     }
+    return meta
   } catch {
-    /* ignore malformed meta */
+    return {} // ignore malformed meta
   }
-  return {}
+}
+
+/** Copy of `meta` with the icon of note file `name` set (or removed if `icon` is undefined). */
+export function withNoteIcon(meta: FolderMeta, name: string, icon: string | undefined): FolderMeta {
+  const notes = { ...meta.notes }
+  if (icon) notes[name] = icon
+  else delete notes[name]
+  const next: FolderMeta = { ...meta }
+  if (Object.keys(notes).length) next.notes = notes
+  else delete next.notes
+  return next
 }
 
 export function serializeMeta(meta: FolderMeta): string {
@@ -87,7 +108,12 @@ export function buildTree(
   for (const path of paths) {
     if (isHidden(path)) continue
     if (isNotePath(path)) {
-      ensureFolder(dirname(path)).notes.push({ kind: 'note', path, name: noteTitle(path) })
+      ensureFolder(dirname(path)).notes.push({
+        kind: 'note',
+        path,
+        name: noteTitle(path),
+        icon: metas[dirname(path)]?.notes?.[basename(path)],
+      })
     } else if (isMetaPath(path)) {
       ensureFolder(dirname(path))
     }

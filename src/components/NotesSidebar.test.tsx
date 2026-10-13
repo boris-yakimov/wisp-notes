@@ -74,7 +74,9 @@ describe('note & folder operations (T10)', () => {
     await answerPrompt('Today', 'Rename')
     await waitFor(() => expect(fake.drive.files()['Today.md']).toBe('inbox'))
     expect(fake.drive.files()['Inbox.md']).toBeUndefined()
-    expect(await screen.findByRole('link', { name: /^Today/ })).toHaveAttribute('aria-current', 'page')
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /^Today/ })).toHaveAttribute('aria-current', 'page'),
+    )
   })
 
   it('renames a folder with all its contents in one request', async () => {
@@ -206,10 +208,48 @@ describe('folder icon picker (T11)', () => {
   it('removes an icon', async () => {
     fake.drive.write('Work/_meta.json', '{"icon":"star"}')
     renderApp('/')
+    // Wait for the meta to load: until then the picker doesn't know the icon and "Remove icon" is disabled.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('treeitem', { name: 'Work' }).querySelector('[data-icon="star"]'),
+      ).not.toBeNull(),
+    )
     const menu = await openMenu('Work', 'button')
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Remove icon' }))
     await waitFor(() => expect(fake.drive.files()['Work/_meta.json']).toBe('{}\n'))
+  })
+})
+
+describe('note icons', () => {
+  it('picks an icon for a note and keeps it when the note is renamed', async () => {
+    renderApp('/')
+    let menu = await openMenu('Plan')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
+    await userEvent.type(await screen.findByRole('searchbox', { name: 'Search icons' }), 'rocket{Enter}')
+    await waitFor(() =>
+      expect(JSON.parse(fake.drive.files()['Work/_meta.json']!)).toEqual({ notes: { 'Plan.md': 'rocket' } }),
+    )
+    const icon = () =>
+      screen.getByRole('treeitem', { name: /^(Plan|Launch)$/ }).querySelector('a svg[data-icon]')
+    await waitFor(() => expect(icon()).toHaveAttribute('data-icon', 'rocket'))
+
+    menu = await openMenu('Plan')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
+    await answerPrompt('Launch', 'Rename')
+    await waitFor(() =>
+      expect(JSON.parse(fake.drive.files()['Work/_meta.json']!)).toEqual({
+        notes: { 'Launch.md': 'rocket' },
+      }),
+    )
+    // The tree re-reads _meta.json after the save; the icon follows once that completes.
+    await waitFor(() => expect(icon()).toHaveAttribute('data-icon', 'rocket'))
+  })
+
+  it('shows the default page icon for notes without one', async () => {
+    renderApp('/')
+    const inbox = await screen.findByRole('treeitem', { name: 'Inbox' })
+    expect(inbox.querySelector('svg[data-icon]')).toHaveAttribute('data-icon', 'note')
   })
 })
 
@@ -329,7 +369,9 @@ describe('sub-notes', () => {
     await waitFor(() => expect(fake.drive.files()['Inbox/Today.md']).toBe(''))
     expect(fake.drive.files()['Inbox.md']).toBe('inbox')
     const inbox = screen.getByRole('treeitem', { name: 'Inbox' })
-    expect(within(inbox).getByRole('link', { name: /^Today/ })).toHaveAttribute('aria-current', 'page')
+    await waitFor(() =>
+      expect(within(inbox).getByRole('link', { name: /^Today/ })).toHaveAttribute('aria-current', 'page'),
+    )
   })
 
   it('renames a note together with its sub-notes and follows the open sub-note', async () => {

@@ -46,6 +46,11 @@ export function NotesSidebar() {
         { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => void actions.rename(node) },
         { label: 'Move to…', icon: <FolderOutput size={14} />, onSelect: () => void actions.moveTo(node) },
         {
+          label: 'Change icon',
+          icon: <ImageIcon size={14} />,
+          onSelect: () => void actions.changeIcon(node),
+        },
+        {
           label: 'Delete',
           icon: <Trash2 size={14} />,
           danger: true,

@@ -2,7 +2,8 @@
 
 Static React SPA. The browser talks directly to the Google Drive API v3; there is no backend.
 Notes are Markdown files in a `Wisp Notes` folder in the user's Drive; subfolders are categories;
-`_meta.json` in a folder holds its icon (`{ "icon": "book-open" }`). A folder next to a note with the same name
+`_meta.json` in a folder holds its icon and its notes' icons (`{ "icon": "book-open", "notes": { "Plan.md": "star" } }`;
+rename/move/delete of a note update it). A folder next to a note with the same name
 (`Plan.md` + `Plan/`, Notion export layout) holds that note's sub-notes: `buildTree` attaches it as
 `NoteNode.children`, and rename/move/delete of the note include it (`childFolderOf` in `paths.ts`). Creating a note
 or folder whose name would pair with an unrelated item is rejected. Access uses the `drive.file` scope:

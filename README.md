@@ -22,6 +22,8 @@ Notes can have sub-notes, like Notion pages: use **+** on a note row (or **New s
 a note onto another note. Sub-notes of `Plan.md` live in a `Plan/` folder next to it, the same layout as a
 Notion export, so imported Notion pages show up nested.
 
+Folders and notes can have icons: **Change icon** in their menu.
+
 Shortcuts: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now. Vim mode and live preview can be toggled in Settings.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how it works.

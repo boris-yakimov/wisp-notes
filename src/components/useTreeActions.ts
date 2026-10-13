@@ -13,6 +13,7 @@ import {
   renameFolderOp,
   renameNoteOp,
   setFolderIconOp,
+  setNoteIconOp,
   type ImportFile,
   type Op,
 } from '../repo/ops.ts'
@@ -41,6 +42,7 @@ export function useTreeActions() {
   const setExpanded = useUi((s) => s.setExpanded)
 
   const entries = () => useRepo.getState().snapshot?.entries ?? []
+  const metas = () => useRepo.getState().metas
 
   /** Run an op: save affected drafts first, apply optimistically, follow moved/deleted open note. */
   const run = useCallback(
@@ -125,7 +127,9 @@ export function useTreeActions() {
       if (!name || name === node.name) return
       await run(
         () =>
-          isNote ? renameNoteOp(node.path, name, entries()) : renameFolderOp(node.path, name, entries()),
+          isNote
+            ? renameNoteOp(node.path, name, entries(), metas())
+            : renameFolderOp(node.path, name, entries()),
         'rename',
         (op) => {
           const key = (p: string) => (isNote ? childFolderOf(p) : p)
@@ -153,7 +157,7 @@ export function useTreeActions() {
       })
       if (!ok) return
       await run(
-        () => (isNote ? deleteNoteOp(node.path, entries()) : deleteFolderOp(node.path, entries())),
+        () => (isNote ? deleteNoteOp(node.path, entries(), metas()) : deleteFolderOp(node.path, entries())),
         'delete',
       )
       if (!isNote && open && isInside(open, node.path)) navigate('/', { replace: true })
@@ -171,7 +175,7 @@ export function useTreeActions() {
       const key = (p: string) => (isNote ? childFolderOf(p) : p)
       const wasOpen = !!useUi.getState().expanded[key(path)]
       await run(
-        () => moveOp(path, toFolder, entries()),
+        () => moveOp(path, toFolder, entries(), metas()),
         'move',
         (op) => {
           if (toFolder) setExpanded(toFolder, true)
@@ -199,12 +203,19 @@ export function useTreeActions() {
     [move],
   )
 
+  /** Pick an icon for a folder (its `_meta.json`) or a note (its folder's `_meta.json`). */
   const changeIcon = useCallback(
-    async (folder: FolderNode) => {
-      const meta = useRepo.getState().metas[folder.path] ?? {}
-      const icon = await iconDialog({ title: `Icon for “${folder.name}”`, current: meta.icon })
+    async (node: FolderNode | NoteNode) => {
+      const current = node.kind === 'note' ? node.icon : useRepo.getState().metas[node.path]?.icon
+      const icon = await iconDialog({ title: `Icon for “${node.name}”`, current })
       if (icon === undefined) return
-      await run(() => setFolderIconOp(folder.path, icon ?? undefined, meta), 'change the icon')
+      await run(
+        () =>
+          node.kind === 'note'
+            ? setNoteIconOp(node.path, icon ?? undefined, metas())
+            : setFolderIconOp(node.path, icon ?? undefined, metas()[node.path] ?? {}),
+        'change the icon',
+      )
     },
     [run],
   )
