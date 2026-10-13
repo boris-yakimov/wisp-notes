@@ -20,6 +20,13 @@ export type DialogRequest =
       resolve: (ok: boolean) => void
     }
   | {
+      kind: 'choose'
+      title: string
+      label: string
+      options: { value: string; label: string }[]
+      resolve: (value: string | null) => void
+    }
+  | {
       kind: 'icon'
       title: string
       current: string | undefined
@@ -79,4 +86,12 @@ export function iconDialog(opts: { title: string; current: string | undefined })
     current: opts.current,
     resolve,
   }))
+}
+
+export function chooseDialog(opts: {
+  title: string
+  label: string
+  options: { value: string; label: string }[]
+}) {
+  return open<string | null>((resolve) => ({ kind: 'choose', ...opts, resolve }))
 }

@@ -82,6 +82,35 @@ export function renameFolderOp(folder: string, newName: string, entries: Entry[]
   return { ops: [{ kind: 'rename', path: folder, to }], target: to, moved }
 }
 
+/**
+ * Move a note or folder into another folder ('' = top level), keeping its name.
+ * One Drive request; everything inside a folder moves with it.
+ */
+export function moveOp(path: string, toFolder: string, entries: Entry[]): Op {
+  const src = find(entries, path)
+  if (!src) throw new OpError(`"${basename(path)}" no longer exists.`)
+  if (toFolder && !find(entries, toFolder)?.folder) throw new OpError('The target folder no longer exists.')
+  if (dirname(path) === toFolder) return { ops: [], target: path }
+  if (src.folder && isInside(toFolder, path)) throw new OpError('A folder cannot be moved into itself.')
+  const to = joinPath(toFolder, basename(path))
+  if (taken(entries, to)) {
+    const where = toFolder ? `“${basename(toFolder)}”` : 'the top level'
+    throw new OpError(`An item named "${basename(path)}" already exists in ${where}.`)
+  }
+  const moved: Record<string, string> = {}
+  for (const e of entries) if (isInside(e.path, path)) moved[e.path] = to + e.path.slice(path.length)
+  return { ops: [{ kind: 'rename', path, to }], target: to, moved }
+}
+
+/** Folders a note/folder can be moved into: top level ('') + every folder except its parent and itself/descendants. */
+export function moveTargets(path: string, entries: Entry[]): string[] {
+  const src = find(entries, path)
+  const parent = dirname(path)
+  return ['', ...entries.filter((e) => e.folder).map((e) => e.path)]
+    .filter((f) => f !== parent && !(src?.folder && f !== '' && isInside(f, path)))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
 export function deleteFolderOp(folder: string, entries: Entry[]): Op {
   if (!find(entries, folder)?.folder) throw new OpError('The folder no longer exists.')
   return { ops: [{ kind: 'trash', path: folder }] }

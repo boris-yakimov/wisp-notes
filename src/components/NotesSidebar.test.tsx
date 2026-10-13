@@ -162,6 +162,7 @@ describe('note & folder operations (T10)', () => {
       'Import files…',
       'Import folder…',
       'Rename',
+      'Move to…',
       'Change icon',
       'Delete',
     ])
@@ -169,7 +170,7 @@ describe('note & folder operations (T10)', () => {
     await userEvent.keyboard('{ArrowDown}')
     expect(items[1]).toHaveFocus()
     await userEvent.keyboard('{ArrowUp}{ArrowUp}')
-    expect(items[6]).toHaveFocus()
+    expect(items[7]).toHaveFocus()
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
@@ -209,5 +210,89 @@ describe('folder icon picker (T11)', () => {
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Remove icon' }))
     await waitFor(() => expect(fake.drive.files()['Work/_meta.json']).toBe('{}\n'))
+  })
+})
+
+describe('moving with drag and drop', () => {
+  /** Simulate an HTML5 drag from one element to another. */
+  function drag(from: Element, to: Element) {
+    const data = new Map<string, string>()
+    const dataTransfer = {
+      setData: (k: string, v: string) => data.set(k, v),
+      getData: (k: string) => data.get(k) ?? '',
+      effectAllowed: '',
+      dropEffect: '',
+    }
+    fireEvent.dragStart(from, { dataTransfer })
+    fireEvent.dragEnter(to, { dataTransfer })
+    fireEvent.dragOver(to, { dataTransfer })
+    fireEvent.drop(to, { dataTransfer })
+    fireEvent.dragEnd(from, { dataTransfer })
+  }
+
+  it('moves a note into a folder', async () => {
+    renderApp('/')
+    drag(await screen.findByRole('link', { name: /^Inbox/ }), screen.getByRole('button', { name: /^Work/ }))
+    await waitFor(() => expect(fake.drive.files()['Work/Inbox.md']).toBe('inbox'))
+    expect(fake.drive.files()['Inbox.md']).toBeUndefined()
+    expect(await screen.findByRole('link', { name: /^Inbox/ })).toHaveAttribute('href', '/n/Work/Inbox.md')
+  })
+
+  it('nests a folder inside another folder with its contents', async () => {
+    fake.drive.mkdir('Archive')
+    renderApp('/')
+    drag(
+      await screen.findByRole('button', { name: /^Work/ }),
+      await screen.findByRole('button', { name: /^Archive/ }),
+    )
+    await waitFor(() => expect(fake.drive.files()['Archive/Work/Sub/Deep.md']).toBe('deep'))
+    expect(fake.drive.folders()).toEqual(['Archive', 'Archive/Work', 'Archive/Work/Sub'])
+  })
+
+  it('moves to the top level when dropped on empty space, and follows the open note', async () => {
+    renderApp('/n/Work/Plan.md')
+    await waitFor(() => expect(document.querySelector('.cm-editor')).not.toBeNull())
+    drag(screen.getByRole('link', { name: /^Plan/ }), screen.getByTestId('tree-root'))
+    await waitFor(() => expect(fake.drive.files()['Plan.md']).toBe('plan'))
+    expect(await screen.findByRole('link', { name: /^Plan/ })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it("dropping on a note puts the item into that note's folder", async () => {
+    renderApp('/')
+    drag(await screen.findByRole('link', { name: /^Inbox/ }), screen.getByRole('link', { name: /^Plan/ }))
+    await waitFor(() => expect(fake.drive.files()['Work/Inbox.md']).toBe('inbox'))
+  })
+
+  it('ignores dropping a folder into itself', async () => {
+    renderApp('/')
+    const before = fake.drive.writeCount()
+    drag(await screen.findByRole('button', { name: /^Work/ }), screen.getByRole('button', { name: /^Sub/ }))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fake.drive.writeCount()).toBe(before)
+    expect(fake.drive.files()['Work/Plan.md']).toBe('plan')
+  })
+
+  it('reports a name clash instead of overwriting', async () => {
+    fake.drive.write('Work/Inbox.md', 'other')
+    renderApp('/')
+    await screen.findAllByRole('link', { name: /^Inbox/ })
+    drag(document.querySelector('a[href="/n/Inbox.md"]')!, screen.getByRole('button', { name: /^Work/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('already exists in “Work”')
+    expect(fake.drive.files()['Inbox.md']).toBe('inbox')
+  })
+
+  it('offers "Move to…" as a keyboard/touch alternative', async () => {
+    renderApp('/')
+    const menu = await openMenu('Inbox')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Move to…' }))
+    const dialog = await screen.findByRole('dialog')
+    const list = within(dialog).getByRole('listbox')
+    expect(
+      within(list)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Work', 'Work / Sub'])
+    await userEvent.type(within(dialog).getByRole('searchbox'), 'sub{Enter}')
+    await waitFor(() => expect(fake.drive.files()['Work/Sub/Inbox.md']).toBe('inbox'))
   })
 })

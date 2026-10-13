@@ -36,7 +36,9 @@ the app only sees files it created or imported.
 4. **Conflicts**: each draft remembers the MD5 it was based on. If Drive's current MD5 differs (and the file isn't
    empty), ours is written as `Name (conflict YYYY-MM-DD).md` and the user is notified. A note deleted elsewhere is recreated.
 5. **Structural ops** (`useTreeActions`): build ops (`ops.ts`) → flush affected drafts → `applyOptimistic`
-   (tree updates at once, rolls back on failure). Folder rename is one Drive update; delete moves to Drive trash.
+   (tree updates at once, rolls back on failure). Folder rename/move is one Drive update; delete moves to Drive trash.
+   Moving: drag a note/folder onto a folder (or a note → its folder, empty space → top level) in `Sidebar.tsx`,
+   or use "Move to…" in the context menu (keyboard/touch). Both call `moveOp`.
 6. **Import**: picked files keep their relative structure under the target folder; text files are uploaded as
    strings (cached and searchable), others (screenshots) as binary. Clashing names get a ` (2)` suffix.
 7. **Auth**: tokens last ~1 h and need a click to renew. On expiry or 401, `authRequired` shows a

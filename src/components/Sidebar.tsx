@@ -1,7 +1,7 @@
 import { ChevronRight, FileText, MoreHorizontal, Plus } from 'lucide-react'
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink } from 'react-router'
-import { notePathToUrl } from '../repo/paths.ts'
+import { dirname, isInside, notePathToUrl } from '../repo/paths.ts'
 import { useRepo } from '../repo/session.ts'
 import { buildTree, type FolderNode, type NoteNode } from '../repo/tree.ts'
 import { useUi } from '../store/ui.ts'
@@ -12,10 +12,89 @@ export interface TreeActions {
   onMenu?: (node: FolderNode | NoteNode, x: number, y: number) => void
   /** Create a note inside a folder. */
   onNewNote?: (folder: string) => void
+  /** Move a dragged note/folder into a folder ('' = top level). */
+  onMove?: (path: string, toFolder: string) => void
+}
+
+/** Drag-and-drop payload type for tree items. */
+const DND_TYPE = 'application/x-wisp-path'
+/** Path being dragged (dataTransfer contents can't be read during dragover). */
+let dragging: { path: string; folder: boolean } | null = null
+
+/** Can the dragged item be dropped into `folder`? */
+function canDrop(folder: string): boolean {
+  if (!dragging) return false
+  if (dirname(dragging.path) === folder) return false // already there
+  if (dragging.folder && folder !== '' && isInside(folder, dragging.path)) return false // into itself
+  return true
+}
+
+function dragSource(path: string, folder: boolean, actions: TreeActions) {
+  if (!actions.onMove) return {}
+  return {
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      dragging = { path, folder }
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData(DND_TYPE, path)
+      e.dataTransfer.setData('text/plain', path)
+    },
+    onDragEnd: () => {
+      dragging = null
+    },
+  }
+}
+
+/** Drop handlers for a folder target. Hovering a closed folder for a moment expands it. */
+function useDropTarget(folder: string, actions: TreeActions, onHoverOpen?: () => void) {
+  const [over, setOver] = useState(false)
+  const depth = useRef(0)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  if (!actions.onMove) return { over: false, handlers: {} }
+  const reset = () => {
+    depth.current = 0
+    setOver(false)
+    clearTimeout(timer.current)
+  }
+  return {
+    over,
+    handlers: {
+      onDragEnter: (e: React.DragEvent) => {
+        if (!canDrop(folder)) return
+        e.preventDefault()
+        e.stopPropagation()
+        if (depth.current++ === 0) {
+          setOver(true)
+          if (onHoverOpen) timer.current = setTimeout(onHoverOpen, 700)
+        }
+      },
+      onDragOver: (e: React.DragEvent) => {
+        if (!canDrop(folder)) return
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'move'
+      },
+      onDragLeave: (e: React.DragEvent) => {
+        if (!over) return
+        e.stopPropagation()
+        if (--depth.current <= 0) reset()
+      },
+      onDrop: (e: React.DragEvent) => {
+        const path = e.dataTransfer.getData(DND_TYPE) || dragging?.path
+        reset()
+        if (!path || !canDrop(folder)) return
+        e.preventDefault()
+        e.stopPropagation()
+        dragging = null
+        actions.onMove!(path, folder)
+      },
+    },
+  }
 }
 
 /** Folder tree built from the current snapshot. */
-export function Sidebar({ onMenu, onNewNote, header }: TreeActions & { header?: React.ReactNode }) {
+export function Sidebar({ onMenu, onNewNote, onMove, header }: TreeActions & { header?: React.ReactNode }) {
   const snapshot = useRepo((s) => s.snapshot)
   const metas = useRepo((s) => s.metas)
   const phase = useRepo((s) => s.phase)
@@ -27,13 +106,17 @@ export function Sidebar({ onMenu, onNewNote, header }: TreeActions & { header?: 
       entries.filter((e) => e.folder).map((e) => e.path),
     )
   }, [snapshot, metas])
-  const actions = useMemo(() => ({ onMenu, onNewNote }), [onMenu, onNewNote])
+  const actions = useMemo(() => ({ onMenu, onNewNote, onMove }), [onMenu, onNewNote, onMove])
+  // Dropping on empty space (or the top-level area) moves to the top level.
+  const rootDrop = useDropTarget('', actions)
 
   return (
     <div className="flex h-full flex-col">
       {header}
       <div
-        className="min-h-0 flex-1 overflow-y-auto py-1"
+        className={`min-h-0 flex-1 overflow-y-auto py-1 ${rootDrop.over ? 'bg-indigo-50 ring-2 ring-indigo-300 ring-inset' : ''}`}
+        data-testid="tree-root"
+        {...rootDrop.handlers}
         onContextMenu={(e) => {
           if (!onMenu || (e.target as HTMLElement).closest('[role=treeitem]')) return
           e.preventDefault()
@@ -121,12 +204,16 @@ function MoreButton({ node, actions }: { node: FolderNode | NoteNode; actions: T
 function FolderItem({ folder, depth, actions }: ItemProps & { folder: FolderNode }) {
   const open = useUi((s) => !!s.expanded[folder.path])
   const toggle = useUi((s) => s.toggleFolder)
+  const setExpanded = useUi((s) => s.setExpanded)
+  const drop = useDropTarget(folder.path, actions, () => setExpanded(folder.path, true))
   return (
     <li role="treeitem" aria-expanded={open} aria-label={folder.name}>
-      <div className="relative">
+      <div className="relative" {...drop.handlers}>
         <button
           type="button"
-          className={rowCls}
+          className={`${rowCls} ${drop.over ? 'bg-indigo-100 ring-2 ring-indigo-400' : ''}`}
+          data-drop-target={drop.over || undefined}
+          {...dragSource(folder.path, true, actions)}
           style={{ paddingLeft: 8 + depth * 14 }}
           onClick={() => toggle(folder.path)}
           data-path={folder.path}
@@ -168,8 +255,10 @@ function FolderItem({ folder, depth, actions }: ItemProps & { folder: FolderNode
 function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
   const dirty = useRepo((s) => !!s.dirty[note.path])
   const closeSidebarOnMobile = useUi((s) => s.closeSidebarOnMobile)
+  // Dropping onto a note puts the item next to it (into the note's folder).
+  const drop = useDropTarget(dirname(note.path), actions)
   return (
-    <li role="treeitem" aria-label={note.name}>
+    <li role="treeitem" aria-label={note.name} {...drop.handlers}>
       <NavLink
         to={notePathToUrl(note.path)}
         className={({ isActive }) =>
@@ -178,6 +267,7 @@ function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
         style={{ paddingLeft: 8 + depth * 14 + 20 }}
         onClick={closeSidebarOnMobile}
         data-path={note.path}
+        {...dragSource(note.path, false, actions)}
         {...menuHandlers(note, actions)}
       >
         <FileText size={15} className="shrink-0 text-neutral-500" aria-hidden />

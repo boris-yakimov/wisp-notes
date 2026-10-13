@@ -6,6 +6,8 @@ import {
   deleteFolderOp,
   deleteNoteOp,
   importOp,
+  moveOp,
+  moveTargets,
   renameFolderOp,
   renameNoteOp,
   setFolderIconOp,
@@ -71,6 +73,33 @@ describe('operation builders', () => {
     expect((setFolderIconOp('Work', undefined, { icon: 'x' }).ops[0] as { content: string }).content).toBe(
       '{}\n',
     )
+  })
+
+  it('moveOp moves notes and folders with one rename', () => {
+    expect(moveOp('Inbox.md', 'Work', entries)).toEqual({
+      ops: [{ kind: 'rename', path: 'Inbox.md', to: 'Work/Inbox.md' }],
+      target: 'Work/Inbox.md',
+      moved: { 'Inbox.md': 'Work/Inbox.md' },
+    })
+    const op = moveOp('Work/Sub', 'Home', entries)
+    expect(op.ops).toEqual([{ kind: 'rename', path: 'Work/Sub', to: 'Home/Sub' }])
+    expect(op.moved).toMatchObject({ 'Work/Sub/Deep.md': 'Home/Sub/Deep.md' })
+    expect(moveOp('Work/Plan.md', '', entries).target).toBe('Plan.md')
+    expect(moveOp('Work/Plan.md', 'Work', entries).ops).toEqual([])
+  })
+
+  it('moveOp rejects moving a folder into itself and name clashes', () => {
+    expect(() => moveOp('Work', 'Work/Sub', entries)).toThrow('cannot be moved into itself')
+    expect(() => moveOp('Work', 'Work', entries)).toThrow('cannot be moved into itself')
+    expect(() => moveOp('Home/Food.md', 'Work', [...entries, f('Work/Food.md')])).toThrow(
+      'already exists in “Work”',
+    )
+    expect(() => moveOp('Inbox.md', 'Nope', entries)).toThrow('no longer exists')
+  })
+
+  it('moveTargets excludes the current parent and the folder itself', () => {
+    expect(moveTargets('Work/Plan.md', entries)).toEqual(['', 'Home', 'Work/Sub'])
+    expect(moveTargets('Work', entries)).toEqual(['Home'])
   })
 
   it('importOp keeps structure, skips hidden files and resolves clashes', () => {

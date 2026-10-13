@@ -1,4 +1,14 @@
-import { FilePlus, FolderInput, FolderPlus, ImageIcon, Pencil, Search, Trash2, Upload } from 'lucide-react'
+import {
+  FilePlus,
+  FolderInput,
+  FolderOutput,
+  FolderPlus,
+  ImageIcon,
+  Pencil,
+  Search,
+  Trash2,
+  Upload,
+} from 'lucide-react'
 import { useCallback, useState } from 'react'
 import type { FolderNode, NoteNode } from '../repo/tree.ts'
 import { useUi } from '../store/ui.ts'
@@ -20,13 +30,15 @@ export function NotesSidebar() {
     [],
   )
   const close = useCallback(() => setMenu(null), [])
-  const { newNote } = actions
+  const { newNote, move } = actions
   const onNewNote = useCallback((folder: string) => void newNote(folder), [newNote])
+  const onMove = useCallback((path: string, toFolder: string) => void move(path, toFolder), [move])
 
   const items = (node: FolderNode | NoteNode): MenuItem[] => {
     if (node.kind === 'note') {
       return [
         { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => void actions.rename(node) },
+        { label: 'Move to…', icon: <FolderOutput size={14} />, onSelect: () => void actions.moveTo(node) },
         {
           label: 'Delete',
           icon: <Trash2 size={14} />,
@@ -53,6 +65,7 @@ export function NotesSidebar() {
     return [
       ...create,
       { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => void actions.rename(node) },
+      { label: 'Move to…', icon: <FolderOutput size={14} />, onSelect: () => void actions.moveTo(node) },
       { label: 'Change icon', icon: <ImageIcon size={14} />, onSelect: () => void actions.changeIcon(node) },
       {
         label: 'Delete',
@@ -68,6 +81,7 @@ export function NotesSidebar() {
       <Sidebar
         onMenu={onMenu}
         onNewNote={onNewNote}
+        onMove={onMove}
         header={
           <div className="flex items-center gap-0.5 border-b border-neutral-200 px-2 py-1">
             <button

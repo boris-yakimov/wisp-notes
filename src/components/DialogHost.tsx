@@ -15,7 +15,7 @@ export function DialogHost() {
 
 function DialogView({ req }: { req: DialogRequest }) {
   const cancel = () => {
-    if (req.kind === 'prompt') req.resolve(null)
+    if (req.kind === 'prompt' || req.kind === 'choose') req.resolve(null)
     else if (req.kind === 'confirm') req.resolve(false)
     else req.resolve(undefined)
   }
@@ -40,6 +40,7 @@ function DialogView({ req }: { req: DialogRequest }) {
           </div>
         </>
       )}
+      {req.kind === 'choose' && <ChooseBody req={req} onCancel={cancel} />}
       {req.kind === 'icon' && (
         <Suspense fallback={<p className="text-sm text-neutral-500">Loading icons…</p>}>
           <IconPicker current={req.current} onPick={req.resolve} onCancel={cancel} />
@@ -97,6 +98,67 @@ function PromptBody({
         </button>
       </div>
     </form>
+  )
+}
+
+function ChooseBody({
+  req,
+  onCancel,
+}: {
+  req: Extract<DialogRequest, { kind: 'choose' }>
+  onCancel: () => void
+}) {
+  const [filter, setFilter] = useState('')
+  const [active, setActive] = useState(0)
+  const shown = req.options.filter((o) => o.label.toLowerCase().includes(filter.trim().toLowerCase()))
+  const i = Math.min(active, Math.max(0, shown.length - 1))
+  return (
+    <div>
+      <input
+        autoFocus
+        type="search"
+        aria-label={req.label}
+        placeholder="Filter folders…"
+        value={filter}
+        onChange={(e) => {
+          setFilter(e.target.value)
+          setActive(0)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            const n = shown.length
+            if (n) setActive((i + (e.key === 'ArrowDown' ? 1 : -1) + n) % n)
+          } else if (e.key === 'Enter' && shown[i]) {
+            e.preventDefault()
+            req.resolve(shown[i].value)
+          }
+        }}
+        className="mb-2 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+      />
+      <ul role="listbox" aria-label={req.label} className="mb-3 max-h-64 overflow-y-auto">
+        {shown.map((o, k) => (
+          <li
+            key={o.value}
+            role="option"
+            aria-selected={k === i}
+            onMouseMove={() => k !== i && setActive(k)}
+            onClick={() => req.resolve(o.value)}
+            className={`cursor-pointer truncate rounded px-2 py-1.5 text-sm ${k === i ? 'bg-indigo-50' : ''}`}
+          >
+            {o.label}
+          </li>
+        ))}
+        {shown.length === 0 && (
+          <li className="px-2 py-3 text-center text-sm text-neutral-500">No folders match.</li>
+        )}
+      </ul>
+      <div className="flex justify-end">
+        <button type="button" className={`${btn} hover:bg-neutral-100`} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
   )
 }
 

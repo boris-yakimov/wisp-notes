@@ -7,6 +7,8 @@ import {
   createNoteOp,
   deleteFolderOp,
   deleteNoteOp,
+  moveOp,
+  moveTargets,
   OpError,
   renameFolderOp,
   renameNoteOp,
@@ -17,7 +19,7 @@ import {
 import { useSession } from '../repo/SessionContext.ts'
 import { notify, useRepo } from '../repo/session.ts'
 import type { FolderNode, NoteNode } from '../repo/tree.ts'
-import { confirmDialog, iconDialog, promptDialog } from '../store/dialog.ts'
+import { chooseDialog, confirmDialog, iconDialog, promptDialog } from '../store/dialog.ts'
 import { useUi } from '../store/ui.ts'
 
 /** Path of the note open in the editor, if any. */
@@ -155,6 +157,39 @@ export function useTreeActions() {
     [run, navigate, open],
   )
 
+  /** Move a note or folder into another folder ('' = top level), e.g. after drag and drop. */
+  const move = useCallback(
+    async (path: string, toFolder: string) => {
+      const wasOpen = !!useUi.getState().expanded[path]
+      await run(
+        () => moveOp(path, toFolder, entries()),
+        'move',
+        (op) => {
+          if (toFolder) setExpanded(toFolder, true)
+          if (wasOpen) setExpanded(op.target!, true)
+        },
+      )
+    },
+    [run, setExpanded],
+  )
+
+  /** Keyboard/touch alternative to drag and drop: pick the destination folder from a list. */
+  const moveTo = useCallback(
+    async (node: FolderNode | NoteNode) => {
+      const options = moveTargets(node.path, entries()).map((f) => ({
+        value: f,
+        label: f ? f.split('/').join(' / ') : 'Top level',
+      }))
+      const to = await chooseDialog({
+        title: `Move “${node.name}” to…`,
+        label: 'Destination folder',
+        options,
+      })
+      if (to !== null) await move(node.path, to)
+    },
+    [move],
+  )
+
   const changeIcon = useCallback(
     async (folder: FolderNode) => {
       const meta = useRepo.getState().metas[folder.path] ?? {}
@@ -181,5 +216,5 @@ export function useTreeActions() {
     [session, setExpanded],
   )
 
-  return { newNote, newFolder, rename, remove, changeIcon, importFiles }
+  return { newNote, newFolder, rename, remove, move, moveTo, changeIcon, importFiles }
 }

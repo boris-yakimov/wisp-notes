@@ -136,3 +136,14 @@ test('works offline from the cache and shows the offline status', async ({ page,
   await expect(page.locator('.cm-content')).toContainText('Things to sort.')
   await expect(page.getByRole('status', { name: 'Save status: Offline' })).toBeVisible()
 })
+
+test('drag a note into a folder', async ({ page, drive, isMobile }) => {
+  test.skip(isMobile, 'HTML5 drag and drop is mouse-only; phones use "Move to…"')
+  await signedIn(page, false)
+  await page.goto('/')
+  const nav = await ensureSidebar(page)
+  await nav.getByRole('link', { name: /^Inbox/ }).dragTo(nav.getByRole('button', { name: /^Home/ }))
+  await expect.poll(() => drive.files()['Home/Inbox.md']).toBe('# Inbox\n\nThings to sort.')
+  expect(drive.files()['Inbox.md']).toBeUndefined()
+  await expect(nav.getByRole('link', { name: /^Inbox/ })).toHaveAttribute('href', '/n/Home/Inbox.md')
+})

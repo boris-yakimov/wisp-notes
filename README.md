@@ -16,6 +16,8 @@ Sign in with Google on first start. Notes live in a **Wisp Notes** folder in you
 `drive.file` permission, so it only sees files it created or imported. Use **Import folder** (sidebar header or a
 folder's menu) to bring in existing Markdown files such as a Notion export.
 
+Drag notes and folders onto a folder in the sidebar to nest them (or use **Move to…** in their menu).
+
 Shortcuts: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now. Vim mode and live preview can be toggled in Settings.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how it works.
