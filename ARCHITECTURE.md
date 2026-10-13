@@ -2,7 +2,10 @@
 
 Static React SPA. The browser talks directly to the Google Drive API v3; there is no backend.
 Notes are Markdown files in a `Wisp Notes` folder in the user's Drive; subfolders are categories;
-`_meta.json` in a folder holds its icon (`{ "icon": "book-open" }`). Access uses the `drive.file` scope:
+`_meta.json` in a folder holds its icon (`{ "icon": "book-open" }`). A folder next to a note with the same name
+(`Plan.md` + `Plan/`, Notion export layout) holds that note's sub-notes: `buildTree` attaches it as
+`NoteNode.children`, and rename/move/delete of the note include it (`childFolderOf` in `paths.ts`). Creating a note
+or folder whose name would pair with an unrelated item is rejected. Access uses the `drive.file` scope:
 the app only sees files it created or imported.
 
 ## Modules (`src/`)
@@ -37,7 +40,7 @@ the app only sees files it created or imported.
    empty), ours is written as `Name (conflict YYYY-MM-DD).md` and the user is notified. A note deleted elsewhere is recreated.
 5. **Structural ops** (`useTreeActions`): build ops (`ops.ts`) → flush affected drafts → `applyOptimistic`
    (tree updates at once, rolls back on failure). Folder rename/move is one Drive update; delete moves to Drive trash.
-   Moving: drag a note/folder onto a folder (or a note → its folder, empty space → top level) in `Sidebar.tsx`,
+   Moving: drag a note/folder onto a folder (onto a note → nested as its sub-note, empty space → top level) in `Sidebar.tsx`,
    or use "Move to…" in the context menu (keyboard/touch). Both call `moveOp`.
 6. **Import**: picked files keep their relative structure under the target folder; text files are uploaded as
    strings (cached and searchable), others (screenshots) as binary. Clashing names get a ` (2)` suffix.

@@ -257,10 +257,17 @@ describe('moving with drag and drop', () => {
     expect(await screen.findByRole('link', { name: /^Plan/ })).toHaveAttribute('aria-current', 'page')
   })
 
-  it("dropping on a note puts the item into that note's folder", async () => {
+  it('dropping on a note nests the item under it', async () => {
     renderApp('/')
     drag(await screen.findByRole('link', { name: /^Inbox/ }), screen.getByRole('link', { name: /^Plan/ }))
-    await waitFor(() => expect(fake.drive.files()['Work/Inbox.md']).toBe('inbox'))
+    await waitFor(() => expect(fake.drive.files()['Work/Plan/Inbox.md']).toBe('inbox'))
+    expect(fake.drive.files()['Work/Plan.md']).toBe('plan')
+    const plan = screen.getByRole('treeitem', { name: 'Plan' })
+    expect(plan).toHaveAttribute('aria-expanded', 'true')
+    expect(within(plan).getByRole('link', { name: /^Inbox/ })).toHaveAttribute(
+      'href',
+      '/n/Work/Plan/Inbox.md',
+    )
   })
 
   it('ignores dropping a folder into itself', async () => {
@@ -291,8 +298,80 @@ describe('moving with drag and drop', () => {
       within(list)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Work', 'Work / Sub'])
+    ).toEqual(['Work', 'Work / Plan', 'Work / Sub', 'Work / Sub / Deep'])
     await userEvent.type(within(dialog).getByRole('searchbox'), 'sub{Enter}')
     await waitFor(() => expect(fake.drive.files()['Work/Sub/Inbox.md']).toBe('inbox'))
+  })
+})
+
+describe('sub-notes', () => {
+  beforeEach(() => {
+    fake.drive.write('Work/Plan/Step.md', 'step')
+    fake.drive.write('Work/Plan/Step/Detail.md', 'detail')
+  })
+
+  it('shows a note with sub-notes as an expandable note, not a folder', async () => {
+    renderApp('/')
+    const plan = await screen.findByRole('treeitem', { name: 'Plan' })
+    expect(screen.queryByRole('button', { name: /^Plan/ })).not.toBeInTheDocument() // no separate folder row
+    expect(plan).toHaveAttribute('aria-expanded', 'false')
+    expect(within(plan).getByRole('link', { name: /^Plan/ })).toHaveAttribute('href', '/n/Work/Plan.md')
+    await userEvent.click(within(plan).getByRole('button', { name: 'Expand Plan' }))
+    expect(plan).toHaveAttribute('aria-expanded', 'true')
+    expect(within(plan).getByRole('link', { name: /^Step/ })).toHaveAttribute('href', '/n/Work/Plan/Step.md')
+    expect(within(plan).getByRole('link', { name: /^Plan/ })).not.toHaveAttribute('aria-current') // didn't open it
+  })
+
+  it('creates a sub-note from the note row', async () => {
+    renderApp('/')
+    await userEvent.click(await screen.findByRole('button', { name: 'New sub-note in Inbox' }))
+    await answerPrompt('Today', 'Create')
+    await waitFor(() => expect(fake.drive.files()['Inbox/Today.md']).toBe(''))
+    expect(fake.drive.files()['Inbox.md']).toBe('inbox')
+    const inbox = screen.getByRole('treeitem', { name: 'Inbox' })
+    expect(within(inbox).getByRole('link', { name: /^Today/ })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('renames a note together with its sub-notes and follows the open sub-note', async () => {
+    renderApp('/n/Work/Plan/Step.md')
+    await waitFor(() => expect(getEditorView().state.doc.toString()).toBe('step'))
+    const menu = await openMenu('Plan')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
+    await answerPrompt('Roadmap', 'Rename')
+    await waitFor(() => expect(fake.drive.files()['Work/Roadmap/Step/Detail.md']).toBe('detail'))
+    expect(fake.drive.files()['Work/Roadmap.md']).toBe('plan')
+    expect(fake.drive.folders()).not.toContain('Work/Plan')
+    await waitFor(() =>
+      expect(document.querySelector('a[aria-current="page"]')).toHaveAttribute(
+        'href',
+        '/n/Work/Roadmap/Step.md',
+      ),
+    )
+  })
+
+  it('deletes a note with its sub-notes after confirming the count', async () => {
+    renderApp('/')
+    const menu = await openMenu('Plan')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('“Plan” and its 2 sub-notes will be deleted')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(Object.keys(fake.drive.files()).some((p) => p.startsWith('Work/Plan'))).toBe(false),
+    )
+  })
+
+  it('moves a note with its sub-notes', async () => {
+    renderApp('/')
+    const menu = await openMenu('Plan')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Move to…' }))
+    const dialog = await screen.findByRole('dialog')
+    const options = within(within(dialog).getByRole('listbox'))
+      .getAllByRole('option')
+      .map((o) => o.textContent)
+    expect(options).not.toContain('Work / Plan / Step') // not under itself
+    await userEvent.type(within(dialog).getByRole('searchbox'), 'inbox{Enter}')
+    await waitFor(() => expect(fake.drive.files()['Inbox/Plan/Step/Detail.md']).toBe('detail'))
+    expect(fake.drive.files()['Inbox/Plan.md']).toBe('plan')
   })
 })

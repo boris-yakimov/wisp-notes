@@ -97,9 +97,74 @@ describe('operation builders', () => {
     expect(() => moveOp('Inbox.md', 'Nope', entries)).toThrow('no longer exists')
   })
 
-  it('moveTargets excludes the current parent and the folder itself', () => {
-    expect(moveTargets('Work/Plan.md', entries)).toEqual(['', 'Home', 'Work/Sub'])
-    expect(moveTargets('Work', entries)).toEqual(['Home'])
+  it('moveTargets lists folders and notes, excluding the current parent and the item itself', () => {
+    expect(moveTargets('Work/Plan.md', entries)).toEqual([
+      '',
+      'Home',
+      'Home/Food',
+      'Inbox',
+      'Work/Sub',
+      'Work/Sub/Deep',
+    ])
+    expect(moveTargets('Work', entries)).toEqual(['Home', 'Home/Food', 'Inbox'])
+  })
+
+  describe('sub-notes ("Plan.md" + "Plan/")', () => {
+    const nested: Entry[] = [
+      ...entries,
+      d('Work/Plan'),
+      f('Work/Plan/Step.md'),
+      d('Work/Plan/Step'),
+      f('Work/Plan/Step/Detail.md'),
+    ]
+
+    it("creates a sub-note in the note's folder and blocks note/folder name pairs", () => {
+      expect(createNoteOp('Inbox', 'Today', entries).ops).toEqual([
+        { kind: 'write', path: 'Inbox/Today.md', content: '', base: null },
+      ])
+      expect(() => createNoteOp('', 'Work', entries)).toThrow('A folder named "Work" already exists')
+      expect(() => createFolderOp('', 'Inbox', entries)).toThrow('A note named "Inbox" already exists')
+    })
+
+    it('renames the note and its sub-notes folder', () => {
+      const op = renameNoteOp('Work/Plan.md', 'Roadmap', nested)
+      expect(op.ops).toEqual([
+        { kind: 'rename', path: 'Work/Plan.md', to: 'Work/Roadmap.md' },
+        { kind: 'rename', path: 'Work/Plan', to: 'Work/Roadmap' },
+      ])
+      expect(op.moved).toMatchObject({ 'Work/Plan/Step/Detail.md': 'Work/Roadmap/Step/Detail.md' })
+      expect(() => renameNoteOp('Inbox.md', 'Work', entries)).toThrow('A folder named "Work" already exists')
+    })
+
+    it('deletes the note with its sub-notes', () => {
+      expect(deleteNoteOp('Work/Plan.md', nested).ops).toEqual([
+        { kind: 'trash', path: 'Work/Plan.md' },
+        { kind: 'trash', path: 'Work/Plan' },
+      ])
+      expect(countNotes('Work/Plan', nested)).toBe(2)
+    })
+
+    it('moves a note under another note, with its sub-notes', () => {
+      expect(moveOp('Inbox.md', 'Home/Food', entries)).toEqual({
+        ops: [{ kind: 'rename', path: 'Inbox.md', to: 'Home/Food/Inbox.md' }],
+        target: 'Home/Food/Inbox.md',
+        moved: { 'Inbox.md': 'Home/Food/Inbox.md' },
+      })
+      const op = moveOp('Work/Plan.md', 'Inbox', nested)
+      expect(op.ops).toEqual([
+        { kind: 'rename', path: 'Work/Plan.md', to: 'Inbox/Plan.md' },
+        { kind: 'rename', path: 'Work/Plan', to: 'Inbox/Plan' },
+      ])
+      expect(op.moved).toMatchObject({ 'Work/Plan/Step.md': 'Inbox/Plan/Step.md' })
+    })
+
+    it('rejects moving a note under itself or onto a same-named item', () => {
+      expect(() => moveOp('Work/Plan.md', 'Work/Plan', nested)).toThrow('cannot be moved into itself')
+      expect(() => moveOp('Work/Plan.md', 'Work/Plan/Step', nested)).toThrow('cannot be moved into itself')
+      expect(() => moveOp('Inbox.md', 'Inbox', entries)).toThrow('cannot be moved into itself')
+      expect(() => moveOp('Home/Food.md', 'Work', [...entries, d('Work/Food')])).toThrow('already exists')
+      expect(moveTargets('Work/Plan.md', nested)).not.toContain('Work/Plan/Step')
+    })
   })
 
   it('importOp keeps structure, skips hidden files and resolves clashes', () => {

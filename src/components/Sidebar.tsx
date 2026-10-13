@@ -1,18 +1,18 @@
 import { ChevronRight, FileText, MoreHorizontal, Plus } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink } from 'react-router'
-import { dirname, isInside, notePathToUrl } from '../repo/paths.ts'
+import { childFolderOf, dirname, isInside, notePathToUrl } from '../repo/paths.ts'
 import { useRepo } from '../repo/session.ts'
-import { buildTree, type FolderNode, type NoteNode } from '../repo/tree.ts'
+import { buildTree, hasChildren, type FolderNode, type NoteNode } from '../repo/tree.ts'
 import { useUi } from '../store/ui.ts'
 import { FolderIcon } from './FolderIcon.tsx'
 
 export interface TreeActions {
   /** Open the context menu for a node at screen coordinates. */
   onMenu?: (node: FolderNode | NoteNode, x: number, y: number) => void
-  /** Create a note inside a folder. */
+  /** Create a note inside a folder (or under a note: `childFolderOf(note)`). */
   onNewNote?: (folder: string) => void
-  /** Move a dragged note/folder into a folder ('' = top level). */
+  /** Move a dragged note/folder into a folder ('' = top level) or under a note (`childFolderOf(note)`). */
   onMove?: (path: string, toFolder: string) => void
 }
 
@@ -25,7 +25,9 @@ let dragging: { path: string; folder: boolean } | null = null
 function canDrop(folder: string): boolean {
   if (!dragging) return false
   if (dirname(dragging.path) === folder) return false // already there
-  if (dragging.folder && folder !== '' && isInside(folder, dragging.path)) return false // into itself
+  // A folder's contents, or a note's sub-notes, live in `own`: can't drop into itself.
+  const own = dragging.folder ? dragging.path : childFolderOf(dragging.path)
+  if (folder !== '' && isInside(folder, own)) return false
   return true
 }
 
@@ -255,26 +257,80 @@ function FolderItem({ folder, depth, actions }: ItemProps & { folder: FolderNode
 function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
   const dirty = useRepo((s) => !!s.dirty[note.path])
   const closeSidebarOnMobile = useUi((s) => s.closeSidebarOnMobile)
-  // Dropping onto a note puts the item next to it (into the note's folder).
-  const drop = useDropTarget(dirname(note.path), actions)
+  const sub = childFolderOf(note.path)
+  const nested = hasChildren(note)
+  const open = useUi((s) => !!s.expanded[sub]) && nested
+  const toggle = useUi((s) => s.toggleFolder)
+  const setExpanded = useUi((s) => s.setExpanded)
+  // Dropping onto a note nests the item under it (like Notion); hovering expands its sub-notes.
+  const drop = useDropTarget(sub, actions, () => setExpanded(sub, true))
+  const menu = menuHandlers(note, actions)
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (nested && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      e.preventDefault()
+      setExpanded(sub, e.key === 'ArrowRight')
+    } else menu.onKeyDown(e)
+  }
   return (
-    <li role="treeitem" aria-label={note.name} {...drop.handlers}>
-      <NavLink
-        to={notePathToUrl(note.path)}
-        className={({ isActive }) =>
-          `${rowCls} ${isActive ? 'bg-indigo-100 text-indigo-900 hover:bg-indigo-100' : ''}`
-        }
-        style={{ paddingLeft: 8 + depth * 14 + 20 }}
-        onClick={closeSidebarOnMobile}
-        data-path={note.path}
-        {...dragSource(note.path, false, actions)}
-        {...menuHandlers(note, actions)}
-      >
-        <FileText size={15} className="shrink-0 text-neutral-500" aria-hidden />
-        <span className="flex-1 truncate">{note.name}</span>
-        {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Unsaved" />}
-        <MoreButton node={note} actions={actions} />
-      </NavLink>
+    <li role="treeitem" aria-label={note.name} aria-expanded={nested ? open : undefined}>
+      <div className="relative" {...drop.handlers}>
+        <NavLink
+          to={notePathToUrl(note.path)}
+          className={({ isActive }) =>
+            `${rowCls} ${isActive ? 'bg-indigo-100 text-indigo-900 hover:bg-indigo-100' : ''} ${
+              drop.over ? 'bg-indigo-100 ring-2 ring-indigo-400' : ''
+            }`
+          }
+          style={{ paddingLeft: 8 + depth * 14 + 20 }}
+          onClick={closeSidebarOnMobile}
+          data-path={note.path}
+          data-drop-target={drop.over || undefined}
+          {...dragSource(note.path, false, actions)}
+          {...menu}
+          onKeyDown={onKeyDown}
+        >
+          <FileText size={15} className="shrink-0 text-neutral-500" aria-hidden />
+          <span className="flex-1 truncate">{note.name}</span>
+          {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Unsaved" />}
+          {actions.onNewNote && (
+            <span
+              role="button"
+              tabIndex={-1}
+              aria-label={`New sub-note in ${note.name}`}
+              className={rowBtnCls}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                actions.onNewNote!(sub)
+              }}
+            >
+              <Plus size={14} />
+            </span>
+          )}
+          <MoreButton node={note} actions={actions} />
+        </NavLink>
+        {nested && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={`${open ? 'Collapse' : 'Expand'} ${note.name}`}
+            className="absolute top-1/2 -translate-y-1/2 rounded p-0.5 text-neutral-400 hover:bg-neutral-300/70"
+            style={{ left: 8 + depth * 14 - 2 }}
+            onClick={() => toggle(sub)}
+          >
+            <ChevronRight
+              size={14}
+              className={`transition-transform ${open ? 'rotate-90' : ''}`}
+              aria-hidden
+            />
+          </button>
+        )}
+      </div>
+      {open && note.children && (
+        <ul role="group">
+          <FolderChildren folder={note.children} depth={depth + 1} actions={actions} />
+        </ul>
+      )}
     </li>
   )
 }

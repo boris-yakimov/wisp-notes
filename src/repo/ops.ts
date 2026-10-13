@@ -1,6 +1,17 @@
 import type { Entry } from '../drive/remoteTree.ts'
 import type { DriveOp } from './apply.ts'
-import { basename, dirname, isInside, joinPath, metaPath, NOTE_EXT, validateName } from './paths.ts'
+import {
+  basename,
+  childFolderOf,
+  dirname,
+  isInside,
+  isNotePath,
+  joinPath,
+  metaPath,
+  NOTE_EXT,
+  noteTitle,
+  validateName,
+} from './paths.ts'
 import { serializeMeta, type FolderMeta } from './tree.ts'
 
 /**
@@ -38,81 +49,146 @@ function noteFileName(name: string): string {
 const find = (entries: Entry[], path: string) => entries.find((e) => e.path === path)
 const taken = (entries: Entry[], path: string) =>
   entries.some((e) => e.path.toLowerCase() === path.toLowerCase())
+const isFolder = (entries: Entry[], path: string) => !!find(entries, path)?.folder
+const isNote = (entries: Entry[], path: string) => {
+  const e = find(entries, path)
+  return !!e && !e.folder && isNotePath(path)
+}
+/** The note's sub-note folder, if it exists. */
+const childFolder = (entries: Entry[], notePath: string) => {
+  const c = childFolderOf(notePath)
+  return isFolder(entries, c) ? c : undefined
+}
+/** Can items be put into `folder`: top level, a folder, or a note (its sub-note folder)? */
+const isContainer = (entries: Entry[], folder: string) =>
+  folder === '' ||
+  isFolder(entries, folder) ||
+  entries.some((e) => !e.folder && isNotePath(e.path) && childFolderOf(e.path) === folder)
+/** A note "X.md" and a folder "X" side by side form one item (note with sub-notes). */
+const pairOf = (path: string, folder: boolean) => (folder ? path + NOTE_EXT : childFolderOf(path))
+/** Old → new paths for an item and everything inside it. */
+function movedPaths(entries: Entry[], pairs: [string, string][]): Record<string, string> {
+  const moved: Record<string, string> = {}
+  for (const [from, to] of pairs)
+    for (const e of entries) if (isInside(e.path, from)) moved[e.path] = to + e.path.slice(from.length)
+  return moved
+}
 
+/** Create a note in `folder`. For a sub-note, `folder` is the parent note's `childFolderOf`. */
 export function createNoteOp(folder: string, name: string, entries: Entry[]): Op {
   const path = joinPath(folder, noteFileName(name))
   if (taken(entries, path)) throw new OpError(`A note named "${basename(path)}" already exists here.`)
+  if (taken(entries, childFolderOf(path)))
+    throw new OpError(`A folder named "${noteTitle(path)}" already exists here.`)
   return { ops: [{ kind: 'write', path, content: '', base: null }], target: path }
 }
 
 export function createFolderOp(parent: string, name: string, entries: Entry[]): Op {
   const path = joinPath(parent, checkName(name))
   if (taken(entries, path)) throw new OpError(`A folder named "${basename(path)}" already exists here.`)
+  if (taken(entries, path + NOTE_EXT))
+    throw new OpError(`A note named "${basename(path)}" already exists here.`)
   return { ops: [{ kind: 'mkdir', path }], target: path }
 }
 
+/** Rename a note; its sub-notes folder is renamed with it. */
 export function renameNoteOp(path: string, newName: string, entries: Entry[]): Op {
   if (!find(entries, path)) throw new OpError('The note no longer exists.')
   const to = joinPath(dirname(path), noteFileName(newName))
   if (to === path) return { ops: [], target: path }
   // Case-only renames are fine; anything else must be free.
-  if (to.toLowerCase() !== path.toLowerCase() && taken(entries, to)) {
-    throw new OpError(`A note named "${basename(to)}" already exists here.`)
+  if (to.toLowerCase() !== path.toLowerCase()) {
+    if (taken(entries, to)) throw new OpError(`A note named "${basename(to)}" already exists here.`)
+    if (taken(entries, childFolderOf(to)))
+      throw new OpError(`A folder named "${noteTitle(to)}" already exists here.`)
   }
-  return { ops: [{ kind: 'rename', path, to }], target: to, moved: { [path]: to } }
+  const child = childFolder(entries, path)
+  const ops: DriveOp[] = [{ kind: 'rename', path, to }]
+  if (child) ops.push({ kind: 'rename', path: child, to: childFolderOf(to) })
+  return {
+    ops,
+    target: to,
+    moved: movedPaths(
+      entries,
+      child
+        ? [
+            [path, to],
+            [child, childFolderOf(to)],
+          ]
+        : [[path, to]],
+    ),
+  }
 }
 
+/** Delete a note together with its sub-notes. */
 export function deleteNoteOp(path: string, entries: Entry[]): Op {
   if (!find(entries, path)) throw new OpError('The note no longer exists.')
-  return { ops: [{ kind: 'trash', path }] }
+  const child = childFolder(entries, path)
+  return { ops: [{ kind: 'trash', path }, ...(child ? [{ kind: 'trash' as const, path: child }] : [])] }
 }
 
 /** One Drive rename; everything inside moves with the folder. */
 export function renameFolderOp(folder: string, newName: string, entries: Entry[]): Op {
-  if (!find(entries, folder)?.folder) throw new OpError('The folder no longer exists.')
+  if (!isFolder(entries, folder)) throw new OpError('The folder no longer exists.')
   const to = joinPath(dirname(folder), checkName(newName))
   if (to === folder) return { ops: [], target: folder }
-  if (to.toLowerCase() !== folder.toLowerCase() && taken(entries, to)) {
-    throw new OpError(`A folder named "${basename(to)}" already exists here.`)
+  if (to.toLowerCase() !== folder.toLowerCase()) {
+    if (taken(entries, to)) throw new OpError(`A folder named "${basename(to)}" already exists here.`)
+    if (taken(entries, to + NOTE_EXT))
+      throw new OpError(`A note named "${basename(to)}" already exists here.`)
   }
-  const moved: Record<string, string> = {}
-  for (const e of entries) {
-    if (e.path !== folder && isInside(e.path, folder)) moved[e.path] = to + e.path.slice(folder.length)
-  }
+  const moved = movedPaths(entries, [[folder, to]])
+  delete moved[folder]
   return { ops: [{ kind: 'rename', path: folder, to }], target: to, moved }
 }
 
 /**
- * Move a note or folder into another folder ('' = top level), keeping its name.
- * One Drive request; everything inside a folder moves with it.
+ * Move a note or folder into another folder ('' = top level) or under a note (`childFolderOf(note)`),
+ * keeping its name. A note's sub-notes move with it. One Drive request per moved item.
  */
 export function moveOp(path: string, toFolder: string, entries: Entry[]): Op {
   const src = find(entries, path)
   if (!src) throw new OpError(`"${basename(path)}" no longer exists.`)
-  if (toFolder && !find(entries, toFolder)?.folder) throw new OpError('The target folder no longer exists.')
+  if (!isContainer(entries, toFolder)) throw new OpError('The target no longer exists.')
   if (dirname(path) === toFolder) return { ops: [], target: path }
-  if (src.folder && isInside(toFolder, path)) throw new OpError('A folder cannot be moved into itself.')
+  const own = src.folder ? path : childFolderOf(path) // where its contents live
+  if (toFolder !== '' && isInside(toFolder, own))
+    throw new OpError(`“${noteTitle(path)}” cannot be moved into itself.`)
   const to = joinPath(toFolder, basename(path))
-  if (taken(entries, to)) {
+  if (taken(entries, to) || taken(entries, pairOf(to, src.folder))) {
     const where = toFolder ? `“${basename(toFolder)}”` : 'the top level'
-    throw new OpError(`An item named "${basename(path)}" already exists in ${where}.`)
+    throw new OpError(`An item named "${noteTitle(path)}" already exists in ${where}.`)
   }
-  const moved: Record<string, string> = {}
-  for (const e of entries) if (isInside(e.path, path)) moved[e.path] = to + e.path.slice(path.length)
-  return { ops: [{ kind: 'rename', path, to }], target: to, moved }
+  const child = src.folder ? undefined : childFolder(entries, path)
+  const pairs: [string, string][] = [[path, to]]
+  if (child) pairs.push([child, childFolderOf(to)])
+  return {
+    ops: pairs.map(([p, t]) => ({ kind: 'rename' as const, path: p, to: t })),
+    target: to,
+    moved: movedPaths(entries, pairs),
+  }
 }
 
-/** Folders a note/folder can be moved into: top level ('') + every folder except its parent and itself/descendants. */
+/**
+ * Where a note/folder can be moved: top level (''), every folder, and under every note
+ * (as `childFolderOf(note)`), except its current parent and itself/its descendants.
+ */
 export function moveTargets(path: string, entries: Entry[]): string[] {
   const src = find(entries, path)
   const parent = dirname(path)
-  return ['', ...entries.filter((e) => e.folder).map((e) => e.path)]
-    .filter((f) => f !== parent && !(src?.folder && f !== '' && isInside(f, path)))
+  const own = src?.folder ? path : childFolderOf(path)
+  const candidates = new Set([
+    '',
+    ...entries.filter((e) => e.folder).map((e) => e.path),
+    ...entries.filter((e) => isNote(entries, e.path)).map((e) => childFolderOf(e.path)),
+  ])
+  return [...candidates]
+    .filter((f) => f !== parent && !(f !== '' && isInside(f, own)))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
 }
 
 export function deleteFolderOp(folder: string, entries: Entry[]): Op {
-  if (!find(entries, folder)?.folder) throw new OpError('The folder no longer exists.')
+  if (!isFolder(entries, folder)) throw new OpError('The folder no longer exists.')
   return { ops: [{ kind: 'trash', path: folder }] }
 }
 

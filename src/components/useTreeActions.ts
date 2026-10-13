@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router'
-import { isInside, noteTitle, notePathToUrl } from '../repo/paths.ts'
+import { childFolderOf, isInside, noteTitle, notePathToUrl } from '../repo/paths.ts'
 import {
   countNotes,
   createFolderOp,
@@ -128,7 +128,8 @@ export function useTreeActions() {
           isNote ? renameNoteOp(node.path, name, entries()) : renameFolderOp(node.path, name, entries()),
         'rename',
         (op) => {
-          if (!isNote && useUi.getState().expanded[node.path]) setExpanded(op.target!, true)
+          const key = (p: string) => (isNote ? childFolderOf(p) : p)
+          if (useUi.getState().expanded[key(node.path)]) setExpanded(key(op.target!), true)
         },
       )
     },
@@ -138,12 +139,15 @@ export function useTreeActions() {
   const remove = useCallback(
     async (node: FolderNode | NoteNode) => {
       const isNote = node.kind === 'note'
-      const n = isNote ? 1 : countNotes(node.path, entries())
+      const n = countNotes(isNote ? childFolderOf(node.path) : node.path, entries())
+      const notes = `${n} note${n === 1 ? '' : 's'}`
       const ok = await confirmDialog({
         title: isNote ? 'Delete note?' : 'Delete folder?',
         message: isNote
-          ? `“${noteTitle(node.path)}” will be deleted. It moves to the Google Drive trash (recoverable for 30 days).`
-          : `“${node.name}” and the ${n} note${n === 1 ? '' : 's'} inside will be deleted. They move to the Google Drive trash (recoverable for 30 days).`,
+          ? n
+            ? `“${noteTitle(node.path)}” and its ${n === 1 ? 'sub-note' : `${n} sub-notes`} will be deleted. They move to the Google Drive trash (recoverable for 30 days).`
+            : `“${noteTitle(node.path)}” will be deleted. It moves to the Google Drive trash (recoverable for 30 days).`
+          : `“${node.name}” and the ${notes} inside will be deleted. They move to the Google Drive trash (recoverable for 30 days).`,
         confirmLabel: 'Delete',
         danger: true,
       })
@@ -157,16 +161,21 @@ export function useTreeActions() {
     [run, navigate, open],
   )
 
-  /** Move a note or folder into another folder ('' = top level), e.g. after drag and drop. */
+  /**
+   * Move a note or folder into another folder ('' = top level) or under a note
+   * (`childFolderOf(note)`), e.g. after drag and drop.
+   */
   const move = useCallback(
     async (path: string, toFolder: string) => {
-      const wasOpen = !!useUi.getState().expanded[path]
+      const isNote = !entries().find((e) => e.path === path)?.folder
+      const key = (p: string) => (isNote ? childFolderOf(p) : p)
+      const wasOpen = !!useUi.getState().expanded[key(path)]
       await run(
         () => moveOp(path, toFolder, entries()),
         'move',
         (op) => {
           if (toFolder) setExpanded(toFolder, true)
-          if (wasOpen) setExpanded(op.target!, true)
+          if (wasOpen) setExpanded(key(op.target!), true)
         },
       )
     },
@@ -182,7 +191,7 @@ export function useTreeActions() {
       }))
       const to = await chooseDialog({
         title: `Move “${node.name}” to…`,
-        label: 'Destination folder',
+        label: 'Destination',
         options,
       })
       if (to !== null) await move(node.path, to)

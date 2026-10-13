@@ -18,6 +18,10 @@ folder's menu) to bring in existing Markdown files such as a Notion export.
 
 Drag notes and folders onto a folder in the sidebar to nest them (or use **Move to…** in their menu).
 
+Notes can have sub-notes, like Notion pages: use **+** on a note row (or **New sub-note** in its menu), or drag
+a note onto another note. Sub-notes of `Plan.md` live in a `Plan/` folder next to it, the same layout as a
+Notion export, so imported Notion pages show up nested.
+
 Shortcuts: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now. Vim mode and live preview can be toggled in Settings.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how it works.

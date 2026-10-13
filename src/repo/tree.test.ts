@@ -1,4 +1,4 @@
-import { buildTree, parseMeta } from './tree.ts'
+import { buildTree, hasChildren, parseMeta } from './tree.ts'
 import { conflictPath, noteTitle, validateName } from './paths.ts'
 
 const names = (f: ReturnType<typeof buildTree>) => ({
@@ -37,6 +37,23 @@ describe('buildTree', () => {
       ['Home', undefined],
       ['Work', 'briefcase'],
     ])
+  })
+})
+
+describe('buildTree sub-notes', () => {
+  it('attaches a same-named folder to its note (Notion export layout)', () => {
+    const root = buildTree(['Plan.md', 'Plan/Step.md', 'Plan/Step/Detail.md', 'Other/x.md'], {}, [
+      'Plan',
+      'Plan/Step',
+      'Other',
+    ])
+    expect(root.folders.map((f) => f.path)).toEqual(['Other'])
+    const plan = root.notes.find((n) => n.name === 'Plan')!
+    expect(plan.children?.notes.map((n) => n.path)).toEqual(['Plan/Step.md'])
+    expect(plan.children?.folders).toEqual([])
+    expect(plan.children?.notes[0]!.children?.notes.map((n) => n.path)).toEqual(['Plan/Step/Detail.md'])
+    expect(hasChildren(plan)).toBe(true)
+    expect(hasChildren(buildTree(['A.md'], {}, ['A']).notes[0]!)).toBe(false) // empty folder
   })
 })
 

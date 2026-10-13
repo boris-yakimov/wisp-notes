@@ -35,6 +35,14 @@ export function metaPath(folder: string): string {
   return joinPath(folder, META_FILE)
 }
 
+/**
+ * Folder holding a note's sub-notes: "Work/Plan.md" → "Work/Plan" (same layout as a Notion export).
+ * The folder may not exist yet; it is created with the first sub-note.
+ */
+export function childFolderOf(notePath: string): string {
+  return isNotePath(notePath) ? notePath.slice(0, -NOTE_EXT.length) : notePath
+}
+
 /** True if `path` equals `folder` or lies inside it. */
 export function isInside(path: string, folder: string): boolean {
   return folder === '' || path === folder || path.startsWith(folder + '/')

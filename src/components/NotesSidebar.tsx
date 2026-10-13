@@ -10,6 +10,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { useCallback, useState } from 'react'
+import { childFolderOf } from '../repo/paths.ts'
 import type { FolderNode, NoteNode } from '../repo/tree.ts'
 import { useUi } from '../store/ui.ts'
 import { ContextMenu, type MenuItem } from './ContextMenu.tsx'
@@ -37,6 +38,11 @@ export function NotesSidebar() {
   const items = (node: FolderNode | NoteNode): MenuItem[] => {
     if (node.kind === 'note') {
       return [
+        {
+          label: 'New sub-note',
+          icon: <FilePlus size={14} />,
+          onSelect: () => void actions.newNote(childFolderOf(node.path)),
+        },
         { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => void actions.rename(node) },
         { label: 'Move to…', icon: <FolderOutput size={14} />, onSelect: () => void actions.moveTo(node) },
         {

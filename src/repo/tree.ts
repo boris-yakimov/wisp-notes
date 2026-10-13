@@ -1,4 +1,4 @@
-import { basename, dirname, isHidden, isMetaPath, isNotePath, noteTitle } from './paths.ts'
+import { basename, childFolderOf, dirname, isHidden, isMetaPath, isNotePath, noteTitle } from './paths.ts'
 
 export interface FolderMeta {
   icon?: string
@@ -8,6 +8,8 @@ export interface NoteNode {
   kind: 'note'
   path: string
   name: string
+  /** Sub-notes: the folder next to the note with the same name ("Plan.md" + "Plan/"). */
+  children?: FolderNode
 }
 
 export interface FolderNode {
@@ -97,5 +99,20 @@ export function buildTree(
     f.folders.forEach(sort)
   }
   sort(root)
+  // A folder next to a note with the same name holds the note's sub-notes.
+  const attach = (f: FolderNode) => {
+    for (const n of f.notes) {
+      const i = f.folders.findIndex((c) => c.path === childFolderOf(n.path))
+      if (i >= 0) n.children = f.folders.splice(i, 1)[0]
+    }
+    f.folders.forEach(attach)
+    for (const n of f.notes) if (n.children) attach(n.children)
+  }
+  attach(root)
   return root
+}
+
+/** Does the note have visible sub-notes? */
+export function hasChildren(note: NoteNode): boolean {
+  return !!note.children && (note.children.folders.length > 0 || note.children.notes.length > 0)
 }
