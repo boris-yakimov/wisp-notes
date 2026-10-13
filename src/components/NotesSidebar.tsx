@@ -31,9 +31,10 @@ export function NotesSidebar() {
     [],
   )
   const close = useCallback(() => setMenu(null), [])
-  const { newNote, move } = actions
+  const { newNote, move, rename } = actions
   const onNewNote = useCallback((folder: string) => void newNote(folder), [newNote])
   const onMove = useCallback((path: string, toFolder: string) => void move(path, toFolder), [move])
+  const onRename = useCallback((node: FolderNode | NoteNode) => void rename(node), [rename])
 
   const items = (node: FolderNode | NoteNode): MenuItem[] => {
     if (node.kind === 'note') {
@@ -93,6 +94,7 @@ export function NotesSidebar() {
         onMenu={onMenu}
         onNewNote={onNewNote}
         onMove={onMove}
+        onRename={onRename}
         header={
           <div className="flex items-center gap-0.5 border-b border-neutral-200 px-2 py-1">
             <button

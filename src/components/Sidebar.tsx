@@ -14,6 +14,8 @@ export interface TreeActions {
   onNewNote?: (folder: string) => void
   /** Move a dragged note/folder into a folder ('' = top level) or under a note (`childFolderOf(note)`). */
   onMove?: (path: string, toFolder: string) => void
+  /** Rename a note or folder (F2 on its row). */
+  onRename?: (node: FolderNode | NoteNode) => void
 }
 
 /** Drag-and-drop payload type for tree items. */
@@ -96,7 +98,13 @@ function useDropTarget(folder: string, actions: TreeActions, onHoverOpen?: () =>
 }
 
 /** Folder tree built from the current snapshot. */
-export function Sidebar({ onMenu, onNewNote, onMove, header }: TreeActions & { header?: React.ReactNode }) {
+export function Sidebar({
+  onMenu,
+  onNewNote,
+  onMove,
+  onRename,
+  header,
+}: TreeActions & { header?: React.ReactNode }) {
   const snapshot = useRepo((s) => s.snapshot)
   const metas = useRepo((s) => s.metas)
   const phase = useRepo((s) => s.phase)
@@ -108,7 +116,10 @@ export function Sidebar({ onMenu, onNewNote, onMove, header }: TreeActions & { h
       entries.filter((e) => e.folder).map((e) => e.path),
     )
   }, [snapshot, metas])
-  const actions = useMemo(() => ({ onMenu, onNewNote, onMove }), [onMenu, onNewNote, onMove])
+  const actions = useMemo(
+    () => ({ onMenu, onNewNote, onMove, onRename }),
+    [onMenu, onNewNote, onMove, onRename],
+  )
   // Dropping on empty space (or the top-level area) moves to the top level.
   const rootDrop = useDropTarget('', actions)
 
@@ -173,6 +184,11 @@ function menuHandlers(node: FolderNode | NoteNode, actions: TreeActions) {
       actions.onMenu(node, e.clientX, e.clientY)
     },
     onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'F2' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && actions.onRename) {
+        e.preventDefault()
+        actions.onRename(node)
+        return
+      }
       if (!actions.onMenu) return
       if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
         e.preventDefault()

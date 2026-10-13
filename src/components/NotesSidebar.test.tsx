@@ -142,6 +142,23 @@ describe('note & folder operations (T10)', () => {
     await waitFor(() => expect(Object.keys(fake.drive.files())).toEqual(['Inbox.md']))
   })
 
+  it('renames a note or folder with F2', async () => {
+    renderApp('/')
+    const inbox = await screen.findByRole('link', { name: /^Inbox/ })
+    inbox.focus()
+    await userEvent.keyboard('{F2}')
+    const dialog = await screen.findByRole('dialog', { name: 'Rename note' })
+    expect(within(dialog).getByRole('textbox')).toHaveValue('Inbox')
+    await answerPrompt('Today', 'Rename')
+    await waitFor(() => expect(fake.drive.files()['Today.md']).toBe('inbox'))
+
+    screen.getByRole('button', { name: /^Work/ }).focus()
+    await userEvent.keyboard('{F2}')
+    expect(await screen.findByRole('dialog', { name: 'Rename folder' })).toBeInTheDocument()
+    await answerPrompt('Job', 'Rename')
+    await waitFor(() => expect(fake.drive.files()['Job/Plan.md']).toBe('plan'))
+  })
+
   it('rolls back the optimistic update when the commit fails', async () => {
     renderApp('/')
     fake.drive.failNext = (m: string) =>
