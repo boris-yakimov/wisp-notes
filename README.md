@@ -35,7 +35,7 @@ npm ci
 - **Where notes live**: Markdown files in the **Wisp Notes** folder in your Drive. Folders are categories. You can
   rename the folder or move it anywhere in My Drive; Settings shows where it is and links to it.
 - **Permissions**: the app uses the `drive.file` permission, so it only sees files it created or imported, never
-  the rest of your Drive. Use **Import folder** (sidebar header or a folder's menu) to bring in existing Markdown
+  the rest of your Drive. Use **Import folder** (sidebar header or a folder's menu), or **Import folder contents as sub-notes** on a note, to bring in existing Markdown
   files, such as a Notion export.
 - **Organizing**: drag notes and folders onto a folder in the sidebar to nest them (or use **Move to…** in their
   menu).

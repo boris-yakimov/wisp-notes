@@ -132,6 +132,34 @@ describe('note & folder operations (T10)', () => {
     expect(await screen.findByText('Imported 2 files.')).toBeInTheDocument()
   })
 
+  it("imports a picked folder's contents as sub-notes of a note", async () => {
+    const file = (name: string, rel: string, content: string) => {
+      const f = new File([content], name)
+      Object.defineProperty(f, 'webkitRelativePath', { value: rel })
+      return f
+    }
+    const picked = [
+      file('italy.md', 'Travel/italy.md', '# Italy'),
+      file('Arrival.md', 'Travel/italy/Arrival.md', '# Arrival'),
+    ]
+    const opened: HTMLInputElement[] = []
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (this: HTMLInputElement) {
+      opened.push(this)
+      Object.defineProperty(this, 'files', { value: picked })
+      void this.onchange?.(new Event('change'))
+    })
+    renderApp('/')
+    const menu = await openMenu('Plan')
+    await userEvent.click(
+      within(menu).getByRole('menuitem', { name: 'Import folder contents as sub-notes…' }),
+    )
+    expect(opened[0]!.webkitdirectory).toBe(true)
+    // "Travel/" itself is dropped: the note stands for it
+    await waitFor(() => expect(fake.drive.files()['Work/Plan/italy.md']).toBe('# Italy'))
+    expect(fake.drive.files()['Work/Plan/italy/Arrival.md']).toBe('# Arrival')
+    expect(await screen.findByRole('link', { name: /^italy/ })).toBeInTheDocument()
+  })
+
   it('asks for confirmation before deleting', async () => {
     renderApp('/')
     let menu = await openMenu('Plan')

@@ -52,6 +52,16 @@ export function NotesSidebar() {
           icon: <FilePlus size={14} />,
           onSelect: () => void actions.newNote(childFolderOf(node.path)),
         },
+        {
+          label: 'Import files as sub-notes…',
+          icon: <Upload size={14} />,
+          onSelect: () => pickImport(childFolderOf(node.path), 'files'),
+        },
+        {
+          label: 'Import folder contents as sub-notes…',
+          icon: <FolderInput size={14} />,
+          onSelect: () => pickImport(childFolderOf(node.path), 'contents'),
+        },
         { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => void actions.rename(node) },
         { label: 'Move to…', icon: <FolderOutput size={14} />, onSelect: () => void actions.moveTo(node) },
         {
