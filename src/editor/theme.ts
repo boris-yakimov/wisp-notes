@@ -41,6 +41,8 @@ export const markdownHighlight = syntaxHighlighting(
     { tag: t.quote, color: 'var(--md-quote)' },
     { tag: [t.processingInstruction, t.meta, t.contentSeparator], color: 'var(--md-syntax)' },
     { tag: t.keyword, color: 'var(--md-keyword)' },
+    // Keys in YAML/JSON/TOML code blocks
+    { tag: [t.propertyName, t.definition(t.propertyName)], color: 'var(--md-link)' },
     { tag: t.string, color: 'var(--md-string)' },
     { tag: t.comment, color: 'var(--md-comment)', fontStyle: 'italic' },
     { tag: [t.number, t.bool], color: 'var(--md-number)' },

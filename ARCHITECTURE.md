@@ -68,6 +68,8 @@ the app only sees files it created or imported.
 - `npm run e2e` — Playwright against the production build (CSP active), desktop + Pixel 7 viewports, same fake
   via `page.route` plus a stubbed GIS script (`e2e/fixtures.ts`). Fails on CSP violations or page errors.
 - `npm run lint`, `npm run typecheck`, `npm run build`.
+- README screenshot: `README_SCREENSHOT=1 npx playwright test readme-screenshot --project=desktop` rewrites
+  `docs/screenshot.png`.
 
 ## Conventions for maintainers
 

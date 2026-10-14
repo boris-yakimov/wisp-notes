@@ -1,5 +1,7 @@
 # Wisp Notes
 
+![Wisp Notes in the Terminal theme: folder tree with icons and a Markdown note with headings, tasks and highlighted code blocks](docs/screenshot.png)
+
 Minimal personal notes app: Markdown notes in your own Google Drive, folder tree with icons, CodeMirror editor
 with vim motions and live preview, auto-save, full-text search, offline reading.
 
