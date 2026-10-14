@@ -60,7 +60,9 @@ the app only sees files it created or imported.
 - `drive.file` limits access to the app's own files. Token in `localStorage` only until it expires; sign-out
   revokes it and clears local data.
 - Production build injects a strict CSP (`vite.config.ts`): own scripts plus `accounts.google.com/gsi/client`;
-  `connect-src` limited to `www.googleapis.com` and GIS. Markdown is never rendered as HTML.
+  `connect-src` limited to `www.googleapis.com` and GIS. Markdown is never rendered as HTML. Images in notes (`editor/images.ts`) are repo files only:
+  downloaded via the Drive API, cached by MD5 in IndexedDB (`files` store) and shown as `blob:` URLs (`img-src blob:`);
+  remote image URLs are not loaded.
 
 ## Testing
 

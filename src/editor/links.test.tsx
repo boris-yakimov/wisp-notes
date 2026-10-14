@@ -4,6 +4,7 @@ import { EditorState } from '@codemirror/state'
 import { render } from '@testing-library/react'
 import { createRef } from 'react'
 import { Editor, type EditorHandle } from './Editor.tsx'
+import { findImages } from './images.ts'
 import { linkAt } from './links.ts'
 
 function stateFor(doc: string) {
@@ -87,5 +88,39 @@ describe('Ctrl+click on a link', () => {
     click(content.indexOf('Inbox') + 1, {})
     click(1, { ctrlKey: true })
     expect(onOpenLink).not.toHaveBeenCalled()
+  })
+})
+
+describe('inline images', () => {
+  const doc = 'Text\n\n![shot](a%20b.png)\n\nend'
+  const s = stateFor(doc)
+  const all = [{ from: 0, to: doc.length }]
+
+  it('finds images, replacing the Markdown only in live preview and off the cursor line', () => {
+    expect(findImages(s, all, true, false)).toEqual([
+      { from: 6, to: 24, src: 'a%20b.png', alt: 'shot', replace: true },
+    ])
+    expect(findImages(s, all, false, false)[0]!.replace).toBe(false)
+    const onLine = s.update({ selection: { anchor: 8 } }).state
+    expect(findImages(onLine, all, true, true)[0]!.replace).toBe(false)
+  })
+
+  it('renders the image from the resolver, or a placeholder', async () => {
+    const ref = createRef<EditorHandle>()
+    const resolveImage = vi.fn((src: string) => (src === 'a%20b.png' ? Promise.resolve('blob:img') : null))
+    render(
+      <Editor
+        ref={ref}
+        content={doc + '\n![gone](x.png)'}
+        vimEnabled={false}
+        livePreviewEnabled
+        resolveImage={resolveImage}
+      />,
+    )
+    await vi.waitFor(() =>
+      expect(document.querySelector('.cm-image img')?.getAttribute('src')).toBe('blob:img'),
+    )
+    expect(document.querySelector('.cm-image img')).toHaveAttribute('alt', 'shot')
+    expect(document.querySelector('.cm-image-missing')).toHaveTextContent('gone (image not available)')
   })
 })

@@ -33,8 +33,12 @@ describe('resolveLink', () => {
     expect(resolveLink('/Inbox.md', from)).toEqual({ kind: 'note', path: 'Inbox.md' })
   })
 
-  it('ignores non-note files and paths outside the repo', () => {
-    expect(resolveLink('image.png', from)).toBeNull()
+  it('resolves other files in the repo (images, PDFs) and ignores paths outside it', () => {
+    expect(resolveLink('Plan/Untitled%201.png', from)).toEqual({
+      kind: 'file',
+      path: 'Work/Plan/Untitled 1.png',
+    })
+    expect(resolveLink('Arrival/pass.pdf', from)).toEqual({ kind: 'file', path: 'Work/Arrival/pass.pdf' })
     expect(resolveLink('../../x.md', from)).toBeNull()
     expect(resolveLink('', from)).toBeNull()
   })

@@ -152,6 +152,13 @@ export class FakeDrive {
     })
   }
 
+  /** Simulate another device uploading a binary file (image, PDF). */
+  writeBytes(path: string, bytes: Uint8Array, mimeType = 'image/png'): void {
+    const i = path.lastIndexOf('/')
+    const parent = this.ensureFolder(i === -1 ? '' : path.slice(0, i))
+    this.create({ name: path.slice(i + 1), mimeType, parents: [parent.id], content: bytes })
+  }
+
   /** Simulate another device creating a folder. */
   mkdir(path: string): void {
     this.ensureFolder(path)

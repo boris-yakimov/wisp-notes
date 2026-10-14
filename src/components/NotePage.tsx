@@ -5,10 +5,10 @@ import type { EditorHandle } from '../editor/Editor.tsx'
 
 // CodeMirror is the largest dependency: load it on demand, so the tree renders instantly.
 const Editor = lazy(() => import('../editor/Editor.tsx').then((m) => ({ default: m.Editor })))
-import { resolveLink } from '../repo/links.ts'
-import { notePathToUrl, noteTitle, urlToNotePath } from '../repo/paths.ts'
+import { isImagePath, resolveLink, resolveRepoPath } from '../repo/links.ts'
+import { fileName, notePathToUrl, noteTitle, urlToNotePath } from '../repo/paths.ts'
 import { useSession } from '../repo/SessionContext.ts'
-import { useRepo } from '../repo/session.ts'
+import { notify, useRepo } from '../repo/session.ts'
 import { useResolvedTheme } from '../settings/theme.ts'
 import { useApp } from '../store/app.ts'
 import { useUi } from '../store/ui.ts'
@@ -92,9 +92,27 @@ function NoteView({ path }: { path: string }) {
     (href: string) => {
       const target = resolveLink(href, path)
       if (target?.kind === 'note') navigate(notePathToUrl(target.path))
-      else if (target) window.open(target.url, '_blank', 'noopener,noreferrer')
+      else if (target?.kind === 'file') {
+        // Open the tab now (still in the click), then point it at the downloaded file.
+        const tab = window.open('', '_blank')
+        if (tab) tab.opener = null
+        session.fileUrl(target.path).then(
+          (url) => tab?.location.replace(url),
+          (e: Error) => {
+            tab?.close()
+            notify(`Could not open “${fileName(target.path)}”: ${e.message}`, 'error')
+          },
+        )
+      } else if (target) window.open(target.url, '_blank', 'noopener,noreferrer')
     },
-    [path, navigate],
+    [path, navigate, session],
+  )
+  const resolveImage = useCallback(
+    (src: string) => {
+      const p = resolveRepoPath(src, path)
+      return p && isImagePath(p) ? session.fileUrl(p) : null
+    },
+    [path, session],
   )
 
   if (load.state === 'loading' && hasSnapshot && !exists) {
@@ -118,6 +136,7 @@ function NoteView({ path }: { path: string }) {
             onChange={onChange}
             onSave={onSave}
             onOpenLink={onOpenLink}
+            resolveImage={resolveImage}
             onVimMode={setVimMode}
             vimEnabled={settings.vim}
             livePreviewEnabled={settings.livePreview}

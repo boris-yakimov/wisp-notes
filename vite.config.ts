@@ -14,7 +14,7 @@ export const CSP = [
   "script-src 'self' https://accounts.google.com/gsi/client",
   "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
   'frame-src https://accounts.google.com/gsi/',
-  "img-src 'self' data:",
+  "img-src 'self' data: blob:",
   "font-src 'self'",
   "connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/",
   "object-src 'none'",

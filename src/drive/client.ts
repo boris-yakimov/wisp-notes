@@ -248,6 +248,14 @@ export class DriveClient {
     return decodeUtf8(await res.arrayBuffer())
   }
 
+  /** Binary content (images, PDFs, …). */
+  async downloadBlob(id: string): Promise<Blob> {
+    const res = await this.request('GET', `${API}/files/${encodeURIComponent(id)}`, {
+      query: { alt: 'media' },
+    })
+    return res.blob()
+  }
+
   async createFolder(name: string, parentId: string): Promise<DriveItem> {
     const f = await this.json<RawFile>('POST', `${API}/files`, {
       query: { fields: FILE_FIELDS },

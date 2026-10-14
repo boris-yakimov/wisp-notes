@@ -7,6 +7,7 @@ import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useUi } from '../store/ui.ts'
+import { inlineImages, type ImageResolver } from './images.ts'
 import { linkClick } from './links.ts'
 import { livePreview } from './livePreview.ts'
 import { editorTheme, markdownHighlight } from './theme.ts'
@@ -26,6 +27,8 @@ export interface EditorProps {
   onChange?: (text: string) => void
   onSave?: () => void
   onVimMode?: (mode: string | null) => void
+  /** Object URL for an image written in the note (`![](src)`), or null if it can't be shown. */
+  resolveImage?: ImageResolver
   /** Ctrl/Cmd+click on a link; receives the link target as written. */
   onOpenLink?: (href: string) => void
   vimEnabled: boolean
@@ -53,7 +56,7 @@ function defineExCommands() {
 }
 
 const vimExt = (on: boolean): Extension => (on ? vim() : [])
-const previewExt = (on: boolean): Extension => (on ? livePreview() : [])
+
 const darkExt = (on: boolean): Extension => EditorView.darkTheme.of(on)
 const readOnlyExt = (ro: boolean): Extension => [EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]
 
@@ -63,6 +66,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   const viewRef = useRef<EditorView | null>(null)
   const propsRef = useRef(props)
   propsRef.current = props
+  const previewRef = useRef<(on: boolean) => Extension>(() => [])
   const compartments = useRef({
     vim: new Compartment(),
     preview: new Compartment(),
@@ -74,6 +78,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     defineExCommands()
     const c = compartments.current
     const p = propsRef.current
+    const resolveImage: ImageResolver = (src) => propsRef.current.resolveImage?.(src) ?? null
+    const previewExt = (on: boolean): Extension => [on ? livePreview() : [], inlineImages(resolveImage, on)]
+    previewRef.current = previewExt
     const save = () => {
       propsRef.current.onSave?.()
       return true
@@ -154,7 +161,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
 
   useEffect(() => {
     viewRef.current?.dispatch({
-      effects: compartments.current.preview.reconfigure(previewExt(props.livePreviewEnabled)),
+      effects: compartments.current.preview.reconfigure(previewRef.current(props.livePreviewEnabled)),
     })
   }, [props.livePreviewEnabled])
 

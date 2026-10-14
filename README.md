@@ -50,6 +50,8 @@ npm ci
   before renames/moves/deletes, and when you close the tab.
 - **Shortcuts**: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+click` a link to open it (links to
   other notes open in the app, websites in a new tab).
+- **Images**: `![](image.png)` links to images in your notes folder (e.g. screenshots from a Notion export) show the
+  image right in the note. `Ctrl/Cmd+click` a link to a PDF or other file to open it in a new tab.
 - **Settings**: vim mode, live preview, and the theme (System/Light/Dark/Synthwave/Terminal).
 - **Offline**: notes you've opened stay readable offline; edits are saved when you're back online.
 

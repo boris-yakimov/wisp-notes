@@ -294,3 +294,22 @@ test('drag to the edge of a row to reorder; the middle still nests', async ({ pa
   await nav.getByRole('link', { name: /^Inbox/ }).dragTo(work)
   await expect.poll(() => drive.files()['Work/Inbox.md']).toBe('# Inbox\n\nThings to sort.')
 })
+
+test('images in a note are shown inline, loaded from Drive', async ({ page, drive, isMobile }) => {
+  test.skip(isMobile, 'same code path as desktop')
+  // 2×2 red PNG
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNAMDAE2kBf1ZNkx6AAAAAElFTkSuQmCC',
+    'base64',
+  )
+  drive.write('Trips/Italy.md', '# Italy\n\n## Car\n\n![](Italy/Untitled%201.png)\n\nend')
+  drive.writeBytes('Trips/Italy/Untitled 1.png', new Uint8Array(png))
+  await signedIn(page)
+  await page.goto('/n/Trips/Italy.md')
+  const img = page.locator('.cm-image img')
+  await expect(img).toBeVisible()
+  await expect.poll(() => img.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(2)
+  await expect(img).toHaveAttribute('src', /^blob:/)
+  // The image file itself is not listed as a note in the sidebar
+  await expect(page.getByRole('navigation', { name: 'Notes' }).getByText('Untitled 1')).toHaveCount(0)
+})

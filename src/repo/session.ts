@@ -89,6 +89,8 @@ export class RepoSession {
   private listeners = new Set<Listener>()
   private disposed = false
   private now: () => Date
+  /** Object URLs of repo files (images), by content hash. */
+  private fileUrls = new Map<string, Promise<string>>()
 
   readonly client: DriveClient
   readonly cache: Cache
@@ -112,6 +114,8 @@ export class RepoSession {
 
   dispose(): void {
     this.disposed = true
+    for (const u of this.fileUrls.values()) void u.then(URL.revokeObjectURL, () => undefined)
+    this.fileUrls.clear()
     this.saver.dispose()
     this.listeners.clear()
   }
@@ -254,6 +258,32 @@ export class RepoSession {
     const content = await this.client.download(e.id)
     await this.cache.putBlob(md5Hex(content), content)
     return content
+  }
+
+  /**
+   * Object URL for a file in the repo (an image or attachment), from the device cache or Drive.
+   * URLs are reused per content hash and revoked when the session ends.
+   */
+  fileUrl(path: string): Promise<string> {
+    const e = this.shown.get(path)
+    if (!e || e.folder) return Promise.reject(new DriveError('not-found', `"${path}" does not exist.`))
+    const key = e.md5 ?? e.id
+    let url = this.fileUrls.get(key)
+    if (!url) {
+      url = (async () => {
+        let blob = e.md5 ? await this.cache.getFile(e.md5) : undefined
+        if (!blob) {
+          if (e.id.startsWith('pending:'))
+            throw new DriveError('not-found', 'The file is still being uploaded.')
+          blob = await this.client.downloadBlob(e.id)
+          if (e.md5) await this.cache.putFile(e.md5, blob)
+        }
+        return URL.createObjectURL(blob)
+      })()
+      this.fileUrls.set(key, url)
+      url.catch(() => this.fileUrls.delete(key))
+    }
+    return url
   }
 
   /** Cached content only (no network). */

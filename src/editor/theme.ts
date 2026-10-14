@@ -84,6 +84,15 @@ export const editorTheme = EditorView.theme({
     width: '1em',
     height: '1em',
   },
+  '.cm-image': { display: 'inline-block', maxWidth: '100%', verticalAlign: 'top', margin: '4px 0' },
+  '.cm-image img': {
+    display: 'block',
+    maxWidth: '100%',
+    maxHeight: '70vh',
+    borderRadius: '4px',
+    border: '1px solid var(--md-rule)',
+  },
+  '.cm-image-missing': { color: 'var(--md-muted)', fontSize: '0.9em' },
   '.cm-panels': { fontFamily: 'ui-monospace, monospace', fontSize: '14px' },
   '.cm-vim-panel input': { fontFamily: 'ui-monospace, monospace' },
 })
