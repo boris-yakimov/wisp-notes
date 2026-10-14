@@ -1,5 +1,6 @@
 import { PanelLeft } from 'lucide-react'
 import { useEffect, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import { useUi } from '../store/ui.ts'
 
 interface AppShellProps {
@@ -42,7 +43,11 @@ export function AppShell({ sidebar, main, topBarRight, statusBar }: AppShellProp
             <PanelLeft size={18} />
           </button>
         )}
-        <h1 className="truncate text-sm font-semibold tracking-tight">Wisp Notes</h1>
+        <h1 className="truncate text-sm font-semibold tracking-tight">
+          <Link to="/" className="rounded px-1 hover:text-indigo-600 dark:hover:text-indigo-400">
+            Wisp Notes
+          </Link>
+        </h1>
         <div className="ml-auto flex items-center gap-1">{topBarRight}</div>
       </header>
       <div className="relative flex min-h-0 flex-1">
