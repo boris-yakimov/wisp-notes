@@ -218,3 +218,30 @@ test('upload an image as a note icon', async ({ page, drive }) => {
     .poll(() => JSON.parse(drive.files()['_meta.json'] ?? '{}').notes?.['Inbox.md'] as string | undefined)
     .toMatch(/^data:image\/png;base64,/)
 })
+
+test('Ctrl+click opens links: notes in the app, websites in a new tab', async ({ page, drive, isMobile }) => {
+  test.skip(isMobile, 'Ctrl+click needs a mouse and keyboard')
+  drive.write(
+    'Work/Links.md',
+    'Back to [the inbox](../Inbox.md).\n\nOr visit [the site](https://example.com/).\n\nEnd',
+  )
+  await signedIn(page)
+  await page.route('https://example.com/**', (r) => r.fulfill({ body: 'external' }))
+  await page.goto('/n/Work/Links.md')
+  const editor = page.locator('.cm-content')
+  await expect(editor).toContainText('the site')
+  await editor.getByText('End').click() // cursor off the link lines → live preview hides the syntax
+
+  // A plain click only moves the cursor
+  await editor.getByText('the inbox').click()
+  await expect(page).toHaveURL(/\/n\/Work\/Links\.md$/)
+  await editor.getByText('End').click()
+
+  const popup = page.waitForEvent('popup')
+  await editor.getByText('the site').click({ modifiers: ['ControlOrMeta'] })
+  await expect(await popup).toHaveURL('https://example.com/')
+
+  await editor.getByText('the inbox').click({ modifiers: ['ControlOrMeta'] })
+  await expect(page).toHaveURL(/\/n\/Inbox\.md$/)
+  await expect(editor).toContainText('Things to sort.')
+})

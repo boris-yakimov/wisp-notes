@@ -7,6 +7,7 @@ import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useUi } from '../store/ui.ts'
+import { linkClick } from './links.ts'
 import { livePreview } from './livePreview.ts'
 import { editorTheme, markdownHighlight } from './theme.ts'
 
@@ -25,6 +26,8 @@ export interface EditorProps {
   onChange?: (text: string) => void
   onSave?: () => void
   onVimMode?: (mode: string | null) => void
+  /** Ctrl/Cmd+click on a link; receives the link target as written. */
+  onOpenLink?: (href: string) => void
   vimEnabled: boolean
   livePreviewEnabled: boolean
   /** Dark color scheme (CodeMirror's built-in panels/selection; our colors come from CSS variables). */
@@ -86,6 +89,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: true }),
           markdownHighlight,
+          linkClick((href) => propsRef.current.onOpenLink?.(href)),
           editorTheme,
           c.dark.of(darkExt(!!p.dark)),
           search({ top: true }),

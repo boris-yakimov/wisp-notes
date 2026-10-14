@@ -130,3 +130,25 @@ describe('App: empty notes folder', () => {
     expect(screen.getByRole('button', { name: 'Create a note' })).toBeInTheDocument()
   })
 })
+
+describe('App: Ctrl+click links', () => {
+  function ctrlClick(text: string) {
+    const view = getEditorView()
+    view.posAtCoords = () => view.state.doc.toString().indexOf(text) + 1
+    view.contentDOM.dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, ctrlKey: true }),
+    )
+  }
+
+  it('opens linked notes in the app and external links in a new tab', async () => {
+    fake.drive.write('Work/Links.md', 'To [inbox](../Inbox.md) or [site](https://example.com)')
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    renderApp('/n/Work/Links.md')
+    await waitFor(() => expect(editorText()).toContain('[inbox]'))
+    ctrlClick('site')
+    expect(open).toHaveBeenCalledWith('https://example.com', '_blank', 'noopener,noreferrer')
+    ctrlClick('inbox')
+    await waitFor(() => expect(editorText()).toBe('# Inbox\n\nCafé ☕ and 🎉'))
+    open.mockRestore()
+  })
+})

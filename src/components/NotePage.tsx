@@ -1,11 +1,12 @@
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useParams } from 'react-router'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import type { EditorHandle } from '../editor/Editor.tsx'
 
 // CodeMirror is the largest dependency: load it on demand, so the tree renders instantly.
 const Editor = lazy(() => import('../editor/Editor.tsx').then((m) => ({ default: m.Editor })))
-import { noteTitle } from '../repo/paths.ts'
+import { resolveLink } from '../repo/links.ts'
+import { notePathToUrl, noteTitle } from '../repo/paths.ts'
 import { useSession } from '../repo/SessionContext.ts'
 import { useRepo } from '../repo/session.ts'
 import { useResolvedTheme } from '../settings/theme.ts'
@@ -32,6 +33,7 @@ function NoteView({ path }: { path: string }) {
   const setVimMode = useUi((s) => s.setVimMode)
   const expandTo = useUi((s) => s.expandTo)
   const location = useLocation()
+  const navigate = useNavigate()
   const highlight = (location.state as NoteNavState | null)?.highlight
   const editor = useRef<EditorHandle>(null)
   const [load, setLoad] = useState<Load>({ state: 'loading' })
@@ -84,6 +86,14 @@ function NoteView({ path }: { path: string }) {
 
   const onChange = useCallback((text: string) => void session.editNote(path, text), [session, path])
   const onSave = useCallback(() => void session.saver.saveNow(), [session])
+  const onOpenLink = useCallback(
+    (href: string) => {
+      const target = resolveLink(href, path)
+      if (target?.kind === 'note') navigate(notePathToUrl(target.path))
+      else if (target) window.open(target.url, '_blank', 'noopener,noreferrer')
+    },
+    [path, navigate],
+  )
 
   if (load.state === 'loading' && hasSnapshot && !exists) {
     return <NoteError path={path} message="This note does not exist." />
@@ -104,6 +114,7 @@ function NoteView({ path }: { path: string }) {
             content={load.content}
             onChange={onChange}
             onSave={onSave}
+            onOpenLink={onOpenLink}
             onVimMode={setVimMode}
             vimEnabled={settings.vim}
             livePreviewEnabled={settings.livePreview}

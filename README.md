@@ -25,7 +25,8 @@ Notion export, so imported Notion pages show up nested.
 Folders and notes can have icons: **Change icon** in their menu, then pick one or **Upload image…** your own. **Auto-assign icons** on a folder guesses icons from names (Docker, Kubernetes, AWS, …)
 for everything inside that has none yet, shows them, and saves after you confirm.
 
-Shortcuts: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now. Vim mode, live preview and the theme (System/Light/Dark/Synthwave) can be changed in Settings.
+Shortcuts: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+click` a link to open it (links to
+other notes open in the app, websites in a new tab). Vim mode, live preview and the theme (System/Light/Dark/Synthwave) can be changed in Settings.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how it works.
 
