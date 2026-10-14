@@ -122,6 +122,7 @@ function NoteView({ path }: { path: string }) {
     },
     [path, session],
   )
+  const onClipboardError = useCallback((message: string) => notify(message, 'error'), [])
   const resolveImage = useCallback(
     (src: string) => {
       const p = resolveRepoPath(src, path)
@@ -153,6 +154,7 @@ function NoteView({ path }: { path: string }) {
             onOpenLink={onOpenLink}
             resolveImage={resolveImage}
             onPasteImage={onPasteImage}
+            onClipboardError={onClipboardError}
             onVimMode={setVimMode}
             vimEnabled={settings.vim}
             livePreviewEnabled={settings.livePreview}

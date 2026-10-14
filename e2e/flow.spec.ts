@@ -351,3 +351,40 @@ test('paste an image from the clipboard: shown in the note and saved to Drive', 
     .poll(() => page.locator('.cm-image img').evaluate((el) => (el as HTMLImageElement).naturalWidth))
     .toBe(2)
 })
+
+test('Ctrl+Shift+V pastes an image even in vim normal mode', async ({ page, context, drive, isMobile }) => {
+  test.skip(isMobile, 'keyboard shortcut')
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await signedIn(page) // vim on
+  await page.goto('/n/Work/Plan.md')
+  const editor = page.locator('.cm-content')
+  await expect(editor).toContainText('write tests')
+  await editor.click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('vim-mode')).toHaveText(/normal/i)
+  await page.keyboard.type('gg')
+  // Put a 2×2 PNG on the system clipboard, as a screenshot tool would
+  await page.evaluate(async () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 2
+    canvas.getContext('2d')!.fillRect(0, 0, 2, 2)
+    const blob = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), 'image/png'))
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  })
+  await page.keyboard.press('ControlOrMeta+Shift+V')
+  await expect(page.locator('.cm-image img')).toBeVisible()
+  await expect(page.getByTestId('vim-mode')).toHaveText(/normal/i) // still in normal mode, no block selection
+  await expect
+    .poll(() => Object.keys(drive.files()).find((p) => p.startsWith('Work/Plan/Pasted image ')))
+    .toMatch(/\.png$/)
+  // Inserted as its own line below the first line ("# Plan"), like vim's linewise `p`
+  await page.keyboard.press('ControlOrMeta+s')
+  await expect
+    .poll(() => drive.files()['Work/Plan.md'])
+    .toMatch(/^# Plan\n!\[\]\(Plan\/Pasted%20image%20[^)]+\.png\)\n/)
+
+  // With text on the clipboard it pastes the text
+  await page.evaluate(() => navigator.clipboard.writeText('from clipboard'))
+  await page.keyboard.press('ControlOrMeta+Shift+V')
+  await expect(editor).toContainText('from clipboard')
+})

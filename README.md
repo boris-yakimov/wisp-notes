@@ -50,7 +50,8 @@ npm ci
   before renames/moves/deletes, and when you close the tab.
 - **Shortcuts**: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+click` a link to open it (links to
   other notes open in the app, websites in a new tab).
-- **Images**: paste an image or screenshot (`Ctrl/Cmd+V`) into a note: it appears right away and is saved to Drive
+- **Images**: paste an image or screenshot (`Ctrl/Cmd+V`, or `Ctrl/Cmd+Shift+V`, which also works in vim normal mode)
+  into a note: it appears right away and is saved to Drive
   next to the note (`Plan.md` → `Plan/Pasted image ….png`). `![](image.png)` links to images in your notes folder
   (e.g. from a Notion export) show the image in the note too. `Ctrl/Cmd+click` a link to a PDF or other file to open it in a new tab.
 - **Settings**: vim mode, live preview, and the theme (System/Light/Dark/Synthwave/Terminal).

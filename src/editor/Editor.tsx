@@ -2,7 +2,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
-import { Compartment, EditorState, Transaction, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, Prec, Transaction, type Extension } from '@codemirror/state'
 import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view'
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
@@ -31,6 +31,8 @@ export interface EditorProps {
   resolveImage?: ImageResolver
   /** An image was pasted: store it and return the Markdown to insert (null = not handled). */
   onPasteImage?: (image: File) => string | null
+  /** Ctrl/Cmd+Shift+V could not read the clipboard (permission denied, unsupported). */
+  onClipboardError?: (message: string) => void
   /** Ctrl/Cmd+click on a link; receives the link target as written. */
   onOpenLink?: (href: string) => void
   vimEnabled: boolean
@@ -55,6 +57,79 @@ function defineExCommands() {
   // \ff in normal mode opens search (like a <leader>ff finder in nvim)
   Vim.defineAction('openQuickOpen', () => useUi.getState().setQuickOpen(true))
   Vim.mapCommand('\\ff', 'action', 'openQuickOpen', {}, { context: 'normal' })
+}
+
+/** Is vim on and not in insert mode? Then a paste goes on a new line below, like vim's `p` for lines. */
+function inVimCommandMode(view: EditorView): boolean {
+  const vimState = (getCM(view)?.state as { vim?: { insertMode?: boolean } } | undefined)?.vim
+  return !!vimState && !vimState.insertMode
+}
+
+/** Insert text: at the cursor, or (vim normal/visual mode) on new lines below the cursor's line. */
+function insertPasted(view: EditorView, text: string, ownLine: boolean) {
+  if (inVimCommandMode(view)) {
+    const line = view.state.doc.lineAt(view.state.selection.main.head)
+    const insert = '\n' + text
+    view.dispatch({
+      changes: { from: line.to, insert },
+      selection: { anchor: line.to + 1 },
+      userEvent: 'input.paste',
+      scrollIntoView: true,
+    })
+    return
+  }
+  const { from, to } = view.state.selection.main
+  const before = ownLine && from > view.state.doc.lineAt(from).from ? '\n' : ''
+  const after = ownLine && to < view.state.doc.lineAt(to).to ? '\n' : ''
+  const insert = before + text + after
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: from + insert.length },
+    userEvent: 'input.paste',
+    scrollIntoView: true,
+  })
+}
+
+/** Store pasted images and insert their Markdown, each on its own line (like a screenshot in Notion). */
+function insertImages(view: EditorView, images: File[], onPaste: (f: File) => string | null) {
+  const md = images.map((f) => onPaste(f)).filter((m): m is string => !!m)
+  if (md.length) insertPasted(view, md.join('\n'), true)
+}
+
+const EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+}
+
+/** Ctrl/Cmd+Shift+V: paste images from the clipboard, else its text (as plain text). */
+async function pasteFromClipboard(view: EditorView, props: EditorProps) {
+  try {
+    if (props.onPasteImage && navigator.clipboard?.read) {
+      const items = await navigator.clipboard.read()
+      const images: File[] = []
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'))
+        if (type) {
+          const blob = await item.getType(type)
+          images.push(new File([blob], `image.${EXT[type] ?? 'png'}`, { type }))
+        }
+      }
+      if (images.length) {
+        insertImages(view, images, props.onPasteImage)
+        return
+      }
+    }
+    const text = await navigator.clipboard.readText()
+    if (text) insertPasted(view, text, false)
+  } catch (e) {
+    props.onClipboardError?.(
+      e instanceof DOMException && e.name === 'NotAllowedError'
+        ? 'The browser did not allow reading the clipboard. Allow clipboard access for this site, or use Ctrl+V in insert mode.'
+        : `Could not read the clipboard: ${(e as Error).message}`,
+    )
+  }
 }
 
 const vimExt = (on: boolean): Extension => (on ? vim() : [])
@@ -106,23 +181,24 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
               const images = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'))
               if (!images.length) return false
               e.preventDefault()
-              const md = images.map((f) => onPaste(f)).filter((m): m is string => !!m)
-              if (!md.length) return true
-              // Each image on its own line, like a pasted screenshot in Notion.
-              const { from, to } = view.state.selection.main
-              const line = view.state.doc.lineAt(from)
-              const before = from > line.from ? '\n' : ''
-              const after = to < view.state.doc.lineAt(to).to ? '\n' : ''
-              const insert = before + md.join('\n') + after
-              view.dispatch({
-                changes: { from, to, insert },
-                selection: { anchor: from + insert.length },
-                userEvent: 'input.paste',
-                scrollIntoView: true,
-              })
+              insertImages(view, images, onPaste)
               return true
             },
           }),
+          // Ctrl/Cmd+Shift+V reads the clipboard itself, so it also works in vim normal/visual mode
+          // (where vim takes Ctrl+V and no paste event happens). Runs before vim's key handling.
+          Prec.highest(
+            EditorView.domEventHandlers({
+              keydown(e, view) {
+                if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey || e.key.toLowerCase() !== 'v')
+                  return false
+                if (view.state.readOnly) return false
+                e.preventDefault()
+                void pasteFromClipboard(view, propsRef.current)
+                return true
+              },
+            }),
+          ),
           editorTheme,
           c.dark.of(darkExt(!!p.dark)),
           search({ top: true }),
