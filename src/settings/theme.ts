@@ -3,7 +3,10 @@ import { useApp } from '../store/app.ts'
 import type { Theme } from './settings.ts'
 
 /** The look actually shown: "system" resolved against the OS preference. */
-export type ResolvedTheme = 'light' | 'dark' | 'synthwave'
+export type ResolvedTheme = Exclude<Theme, 'system'>
+
+/** Themes with their own palette class on <html> (on top of `.dark`). */
+const PALETTE_THEMES = ['synthwave', 'terminal'] as const
 
 const QUERY = '(prefers-color-scheme: dark)'
 
@@ -25,12 +28,12 @@ export function resolveTheme(theme: Theme, systemIsDark: boolean): ResolvedTheme
 
 /**
  * Sets the classes on <html> that the styles key off: `.dark` drives Tailwind's `dark:` variant
- * (synthwave is a dark theme too), `.synthwave` remaps the palette and editor colors (index.css).
+ * (every theme but light is dark), `.synthwave` / `.terminal` remap the palette and editor colors (index.css).
  */
 export function applyTheme(resolved: ResolvedTheme): void {
   const cl = document.documentElement.classList
   cl.toggle('dark', resolved !== 'light')
-  cl.toggle('synthwave', resolved === 'synthwave')
+  for (const t of PALETTE_THEMES) cl.toggle(t, resolved === t)
 }
 
 /** Apply a theme once, before React renders (avoids a light flash on dark startup). */

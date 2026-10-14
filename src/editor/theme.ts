@@ -37,7 +37,7 @@ export const markdownHighlight = syntaxHighlighting(
     { tag: t.strikethrough, textDecoration: 'line-through' },
     { tag: t.link, color: 'var(--md-link)', textDecoration: 'underline' },
     { tag: t.url, color: 'var(--md-muted)' },
-    { tag: t.monospace, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9em' },
+    { tag: t.monospace, fontFamily: 'var(--mono-font)', fontSize: '0.9em' },
     { tag: t.quote, color: 'var(--md-quote)' },
     { tag: [t.processingInstruction, t.meta, t.contentSeparator], color: 'var(--md-syntax)' },
     { tag: t.keyword, color: 'var(--md-keyword)' },
@@ -61,13 +61,13 @@ export const editorTheme = EditorView.theme({
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, & ::selection':
     { backgroundColor: 'var(--md-selection)' },
   '.cm-scroller': {
-    fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    fontFamily: 'var(--app-font)',
     lineHeight: '1.65',
   },
   '.cm-content': { maxWidth: '46rem', margin: '0 auto', padding: '24px 20px 40vh' },
   '.cm-line': { padding: '0 2px' },
   '.cm-lp-codeblock, .cm-lp-codeblock *': {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontFamily: 'var(--mono-font)',
     fontSize: '0.9em',
   },
   '.cm-lp-codeblock': { backgroundColor: 'var(--md-code-bg)' },

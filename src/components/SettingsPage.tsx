@@ -131,7 +131,7 @@ function Preferences() {
       <fieldset className="mt-8 space-y-2 border-t border-neutral-200 dark:border-neutral-800 pt-4">
         <legend className="sr-only">Appearance</legend>
         <h3 className="text-sm font-semibold">Appearance</h3>
-        <div role="radiogroup" aria-label="Theme" className="flex gap-4">
+        <div role="radiogroup" aria-label="Theme" className="flex flex-wrap gap-x-4 gap-y-1">
           {THEMES.map((t) => (
             <label key={t} className="flex items-center gap-1.5 text-sm">
               <input
@@ -175,4 +175,5 @@ const themeLabels: Record<Theme, string> = {
   light: 'Light',
   dark: 'Dark',
   synthwave: 'Synthwave',
+  terminal: 'Terminal',
 }

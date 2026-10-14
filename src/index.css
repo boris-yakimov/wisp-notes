@@ -7,6 +7,8 @@
 /* Editor colors (editor/theme.ts reads these, so CodeMirror switches with the class without reconfiguring). */
 :root {
   color-scheme: light;
+  --app-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono-font: ui-monospace, SFMono-Regular, Menlo, monospace;
   --md-link: #4f46e5;
   --md-muted: #6b7280;
   --md-quote: #525252;
@@ -97,6 +99,61 @@
   background-attachment: fixed;
 }
 
+/* Terminal: graphite + phosphor green, monospace everywhere, after cliamp.stream. Same approach as
+   synthwave: remap the neutral/indigo scales. JetBrains Mono is used if installed (no web font: CSP). */
+:root.terminal {
+  --app-font: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --mono-font: var(--app-font);
+
+  --color-neutral-50: #f4f6f4;
+  --color-neutral-100: #e9ece9;
+  --color-neutral-200: #c4cac6;
+  --color-neutral-300: #a9b0ae;
+  --color-neutral-400: #8a9291;
+  --color-neutral-500: #6a7273;
+  --color-neutral-600: #4a5254;
+  --color-neutral-700: #2b3134;
+  --color-neutral-800: #1c2124;
+  --color-neutral-900: #121517;
+  --color-neutral-950: #0b0c0d;
+
+  --color-indigo-50: #effcf2;
+  --color-indigo-100: #d5f7dd;
+  --color-indigo-200: #a9f0b8;
+  --color-indigo-300: #8fe9a2;
+  --color-indigo-400: #74e08c;
+  --color-indigo-500: #5fd27a;
+  --color-indigo-600: #3fae5c;
+  --color-indigo-700: #2e8a47;
+  --color-indigo-800: #1f5c31;
+  --color-indigo-900: #153d22;
+  --color-indigo-950: #0d2415;
+
+  --md-link: #74e08c;
+  --md-muted: #8a9291;
+  --md-quote: #98a09f;
+  --md-syntax: #4a5254;
+  --md-keyword: #c39ad9;
+  --md-string: #e9b455;
+  --md-comment: #6a7273;
+  --md-number: #d99a8f;
+  --md-code-bg: #121517;
+  --md-rule: #2b3134;
+  --md-bullet: #74e08c;
+  --md-cursor: #74e08c;
+  --md-selection: #1f5c31;
+  --md-heading: #a9f0b8;
+  --md-glow: 0 0 8px #74e08c55;
+  --md-vim-cursor: #74e08c;
+  accent-color: #74e08c;
+}
+
+/* Faint green phosphor glow at the top, like a lit CRT. */
+:root.terminal body {
+  background-image: radial-gradient(ellipse 70% 40% at 50% -10%, #74e08c14, transparent 70%);
+  background-attachment: fixed;
+}
+
 html,
 body,
 #root {
@@ -105,11 +162,5 @@ body,
 
 body {
   @apply bg-white text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  font-family: var(--app-font);
 }

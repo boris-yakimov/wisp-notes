@@ -35,7 +35,7 @@ function stubSystemDark(initial: boolean) {
 
 afterEach(() => {
   window.matchMedia = realMatchMedia
-  html.classList.remove('dark', 'synthwave')
+  html.classList.remove('dark', 'synthwave', 'terminal')
 })
 
 describe('theme', () => {
@@ -43,6 +43,7 @@ describe('theme', () => {
     expect(resolveTheme('dark', false)).toBe('dark')
     expect(resolveTheme('light', true)).toBe('light')
     expect(resolveTheme('synthwave', false)).toBe('synthwave')
+    expect(resolveTheme('terminal', false)).toBe('terminal')
     expect(resolveTheme('system', true)).toBe('dark')
     expect(resolveTheme('system', false)).toBe('light')
   })
@@ -67,6 +68,10 @@ describe('theme', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Dark' }))
     expect(html).toHaveClass('dark')
     expect(html).not.toHaveClass('synthwave')
+    await userEvent.click(screen.getByRole('radio', { name: 'Terminal' }))
+    expect(html).toHaveClass('dark', 'terminal')
+    expect(html).not.toHaveClass('synthwave')
+    expect(loadSettings().theme).toBe('terminal')
   })
 
   it('follows the OS preference live when set to system', async () => {
