@@ -93,6 +93,23 @@ export const editorTheme = EditorView.theme({
     border: '1px solid var(--md-rule)',
   },
   '.cm-image-missing': { color: 'var(--md-muted)', fontSize: '0.9em' },
+  '.cm-table-wrap': { overflowX: 'auto', margin: '6px 0' },
+  '.cm-table': { borderCollapse: 'collapse', fontSize: '0.92em', lineHeight: '1.45' },
+  '.cm-table th, .cm-table td': {
+    border: '1px solid var(--md-rule)',
+    padding: '4px 10px',
+    verticalAlign: 'top',
+    textAlign: 'left',
+    // CodeMirror's content wraps anywhere; in cells, wrap only at spaces (wide tables scroll instead).
+    whiteSpace: 'normal',
+    overflowWrap: 'normal',
+    wordBreak: 'normal',
+    minWidth: '4ch',
+    maxWidth: '28rem',
+  },
+  '.cm-table th': { backgroundColor: 'var(--md-code-bg)', fontWeight: '600' },
+  '.cm-table code': { fontFamily: 'var(--mono-font)', fontSize: '0.9em' },
+  '.cm-table-link': { color: 'var(--md-link)', textDecoration: 'underline' },
   '.cm-panels': { fontFamily: 'ui-monospace, monospace', fontSize: '14px' },
   '.cm-vim-panel input': { fontFamily: 'ui-monospace, monospace' },
 })

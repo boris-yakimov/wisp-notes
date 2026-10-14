@@ -50,6 +50,8 @@ npm ci
   before renames/moves/deletes, and when you close the tab.
 - **Shortcuts**: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+click` a link to open it (links to
   other notes open in the app, websites in a new tab).
+- **Tables**: Markdown tables show as a grid; put the cursor in one (click, arrow keys or vim `j`/`k`) to edit its
+  Markdown. `Ctrl/Cmd+click` links inside a table to open them. Wide tables scroll sideways.
 - **Images**: paste an image or screenshot (`Ctrl/Cmd+V`, or `Ctrl/Cmd+Shift+V`, which also works in vim normal mode)
   into a note: it appears right away and is saved to Drive
   next to the note (`Plan.md` → `Plan/Pasted image ….png`). `![](image.png)` links to images in your notes folder

@@ -388,3 +388,46 @@ test('Ctrl+Shift+V pastes an image even in vim normal mode', async ({ page, cont
   await page.keyboard.press('ControlOrMeta+Shift+V')
   await expect(editor).toContainText('from clipboard')
 })
+
+test('tables show as a grid; arrow keys and vim j open them for editing', async ({
+  page,
+  drive,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'keyboard')
+  drive.write(
+    'Trips/Italy.md',
+    '# Italy\n\nBefore\n\n| Activity | Date |\n|---|---|\n| [Plan](../Work/Plan.md) | May 7 |\n\nAfter',
+  )
+  await signedIn(page) // vim on
+  await page.goto('/n/Trips/Italy.md')
+  const editor = page.locator('.cm-content')
+  const table = page.locator('table.cm-table')
+  await expect(table).toBeVisible()
+  await expect(table.locator('td').first()).toHaveText('Plan')
+
+  // vim: from "Before", j j → onto the table's first line: Markdown shown
+  await editor.getByText('Before').click()
+  await page.keyboard.press('Escape')
+  await page.keyboard.type('jj')
+  await expect(table).toHaveCount(0)
+  await expect(editor).toContainText('| Activity | Date |')
+  await page.keyboard.type('G') // last line: grid again
+  await expect(table).toBeVisible()
+
+  // Arrow keys (vim off) from the line above enter the table too
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await page.getByLabel('Vim mode').uncheck()
+  await page.goBack()
+  await expect(table).toBeVisible()
+  await editor.getByText('Before').click()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await expect(table).toHaveCount(0)
+  await page.keyboard.press('ControlOrMeta+End')
+  await expect(table).toBeVisible()
+
+  // Ctrl+click on a link in a cell opens the note
+  await table.getByText('Plan').click({ modifiers: ['ControlOrMeta'] })
+  await expect(page).toHaveURL(/\/n\/Work\/Plan\.md$/)
+})

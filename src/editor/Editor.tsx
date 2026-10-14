@@ -10,6 +10,7 @@ import { useUi } from '../store/ui.ts'
 import { inlineImages, type ImageResolver } from './images.ts'
 import { linkClick } from './links.ts'
 import { livePreview } from './livePreview.ts'
+import { tablePreview } from './tables.ts'
 import { editorTheme, markdownHighlight } from './theme.ts'
 
 export interface EditorHandle {
@@ -156,7 +157,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     const c = compartments.current
     const p = propsRef.current
     const resolveImage: ImageResolver = (src) => propsRef.current.resolveImage?.(src) ?? null
-    const previewExt = (on: boolean): Extension => [on ? livePreview() : [], inlineImages(resolveImage, on)]
+    const openLink = (href: string) => propsRef.current.onOpenLink?.(href)
+    const previewExt = (on: boolean): Extension => [
+      on ? [livePreview(), tablePreview(openLink)] : [],
+      inlineImages(resolveImage, on),
+    ]
     previewRef.current = previewExt
     const save = () => {
       propsRef.current.onSave?.()
