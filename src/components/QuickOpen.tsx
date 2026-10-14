@@ -94,10 +94,10 @@ function Palette({ search }: { search: SearchService }) {
         role="dialog"
         aria-modal="true"
         aria-label="Search notes"
-        className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-xl"
+        className="w-full max-w-xl overflow-hidden rounded-lg bg-white dark:bg-neutral-900 shadow-xl"
       >
-        <div className="flex items-center gap-2 border-b border-neutral-200 px-3">
-          <Search size={16} className="shrink-0 text-neutral-400" aria-hidden />
+        <div className="flex items-center gap-2 border-b border-neutral-200 dark:border-neutral-800 px-3">
+          <Search size={16} className="shrink-0 text-neutral-400 dark:text-neutral-500" aria-hidden />
           <input
             autoFocus
             role="combobox"
@@ -132,23 +132,26 @@ function Palette({ search }: { search: SearchService }) {
               aria-selected={i === activeIndex}
               onMouseMove={() => i !== activeIndex && setActive(i)}
               onClick={() => choose(hit)}
-              className={`cursor-pointer px-3 py-2 ${i === activeIndex ? 'bg-indigo-50' : ''}`}
+              className={`cursor-pointer px-3 py-2 ${i === activeIndex ? 'bg-indigo-50 dark:bg-indigo-950/50' : ''}`}
             >
               <div className="flex items-center gap-2">
-                <FileText size={14} className="shrink-0 text-neutral-400" aria-hidden />
+                <FileText size={14} className="shrink-0 text-neutral-400 dark:text-neutral-500" aria-hidden />
                 <span className="truncate text-sm font-medium">
                   <Highlighted text={hit.title} terms={terms} />
                 </span>
                 {dirname(hit.path) && (
-                  <span className="ml-auto shrink-0 truncate text-xs text-neutral-400">
+                  <span className="ml-auto shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-500">
                     {dirname(hit.path)}
                   </span>
                 )}
               </div>
               {hit.snippet && (
-                <p className="mt-0.5 truncate pl-6 text-xs text-neutral-600" data-testid="snippet">
+                <p
+                  className="mt-0.5 truncate pl-6 text-xs text-neutral-600 dark:text-neutral-400"
+                  data-testid="snippet"
+                >
                   {hit.snippet.text.slice(0, hit.snippet.matchStart)}
-                  <mark className="rounded-sm bg-yellow-200 text-inherit">
+                  <mark className="rounded-sm bg-yellow-200 dark:bg-yellow-700/60 text-inherit">
                     {hit.snippet.text.slice(hit.snippet.matchStart, hit.snippet.matchEnd)}
                   </mark>
                   {hit.snippet.text.slice(hit.snippet.matchEnd)}
@@ -157,12 +160,12 @@ function Palette({ search }: { search: SearchService }) {
             </li>
           ))}
           {results.length === 0 && (
-            <li className="px-3 py-6 text-center text-sm text-neutral-500">
+            <li className="px-3 py-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
               {query.trim() ? `No notes match “${query.trim()}”.` : 'No notes yet.'}
             </li>
           )}
         </ul>
-        <div className="hidden gap-3 border-t border-neutral-200 px-3 py-1.5 text-xs text-neutral-400 sm:flex">
+        <div className="hidden gap-3 border-t border-neutral-200 dark:border-neutral-800 px-3 py-1.5 text-xs text-neutral-400 dark:text-neutral-500 sm:flex">
           <span>↑↓ navigate</span>
           <span>↵ open</span>
           <span>esc close</span>
@@ -177,7 +180,7 @@ function Highlighted({ text, terms }: { text: string; terms: string[] }) {
     <>
       {highlightParts(text, terms).map((p, i) =>
         p.match ? (
-          <mark key={i} className="rounded-sm bg-yellow-200 text-inherit">
+          <mark key={i} className="rounded-sm bg-yellow-200 dark:bg-yellow-700/60 text-inherit">
             {p.text}
           </mark>
         ) : (

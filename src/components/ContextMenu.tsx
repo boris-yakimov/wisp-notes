@@ -72,7 +72,7 @@ export function ContextMenu({ x, y, items, label, onClose }: Props) {
       aria-label={label}
       onKeyDown={onKeyDown}
       style={{ left: pos.left, top: pos.top }}
-      className="fixed z-50 min-w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg"
+      className="fixed z-50 min-w-44 rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 py-1 shadow-lg"
     >
       {items.map((item) => (
         <button
@@ -84,11 +84,11 @@ export function ContextMenu({ x, y, items, label, onClose }: Props) {
             onClose()
             item.onSelect()
           }}
-          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-neutral-100 focus:bg-neutral-100 focus:outline-none ${
-            item.danger ? 'text-red-700' : ''
+          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:bg-neutral-100 dark:focus:bg-neutral-800 focus:outline-none ${
+            item.danger ? 'text-red-700 dark:text-red-400' : ''
           }`}
         >
-          <span className="w-4 text-neutral-500">{item.icon}</span>
+          <span className="w-4 text-neutral-500 dark:text-neutral-400">{item.icon}</span>
           {item.label}
         </button>
       ))}

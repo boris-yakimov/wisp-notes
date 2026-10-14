@@ -8,6 +8,7 @@ const Editor = lazy(() => import('../editor/Editor.tsx').then((m) => ({ default:
 import { noteTitle } from '../repo/paths.ts'
 import { useSession } from '../repo/SessionContext.ts'
 import { useRepo } from '../repo/session.ts'
+import { useIsDark } from '../settings/theme.ts'
 import { useApp } from '../store/app.ts'
 import { useUi } from '../store/ui.ts'
 
@@ -27,6 +28,7 @@ export interface NoteNavState {
 function NoteView({ path }: { path: string }) {
   const session = useSession()
   const settings = useApp((s) => s.settings)
+  const dark = useIsDark()
   const setVimMode = useUi((s) => s.setVimMode)
   const expandTo = useUi((s) => s.expandTo)
   const location = useLocation()
@@ -91,7 +93,7 @@ function NoteView({ path }: { path: string }) {
   return (
     <div className="flex h-full flex-col">
       {!exists && (
-        <p className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-sm text-amber-800">
+        <p className="border-b border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 px-4 py-1.5 text-sm text-amber-800 dark:text-amber-300">
           This note was moved or deleted.
         </p>
       )}
@@ -105,6 +107,7 @@ function NoteView({ path }: { path: string }) {
             onVimMode={setVimMode}
             vimEnabled={settings.vim}
             livePreviewEnabled={settings.livePreview}
+            dark={dark}
             readOnly={!exists}
             autoFocus
             initialSelection={initialSelection}
@@ -119,7 +122,7 @@ function NoteError({ path, message }: { path: string; message: string }) {
   return (
     <div
       role="alert"
-      className="m-8 flex items-start gap-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+      className="m-8 flex items-start gap-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 p-3 text-sm text-red-800 dark:text-red-300"
     >
       <AlertCircle size={16} className="mt-0.5 shrink-0" />
       <div>
@@ -132,7 +135,7 @@ function NoteError({ path, message }: { path: string; message: string }) {
 
 function Loading() {
   return (
-    <div className="flex items-center gap-2 p-8 text-sm text-neutral-500" role="status">
+    <div className="flex items-center gap-2 p-8 text-sm text-neutral-500 dark:text-neutral-400" role="status">
       <Loader2 size={16} className="animate-spin" /> Loading note…
     </div>
   )

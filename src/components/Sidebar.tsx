@@ -127,7 +127,7 @@ export function Sidebar({
     <div className="flex h-full flex-col">
       {header}
       <div
-        className={`min-h-0 flex-1 overflow-y-auto py-1 ${rootDrop.over ? 'bg-indigo-50 ring-2 ring-indigo-300 ring-inset' : ''}`}
+        className={`min-h-0 flex-1 overflow-y-auto py-1 ${rootDrop.over ? 'bg-indigo-50 dark:bg-indigo-950/50 ring-2 ring-indigo-300 dark:ring-indigo-700 ring-inset' : ''}`}
         data-testid="tree-root"
         {...rootDrop.handlers}
         onContextMenu={(e) => {
@@ -136,9 +136,11 @@ export function Sidebar({
           onMenu(root, e.clientX, e.clientY)
         }}
       >
-        {phase === 'loading' && !snapshot && <p className="px-3 py-2 text-sm text-neutral-500">Loading…</p>}
+        {phase === 'loading' && !snapshot && (
+          <p className="px-3 py-2 text-sm text-neutral-500 dark:text-neutral-400">Loading…</p>
+        )}
         {snapshot && root.folders.length === 0 && root.notes.length === 0 && (
-          <p className="px-3 py-2 text-sm text-neutral-500">No notes yet.</p>
+          <p className="px-3 py-2 text-sm text-neutral-500 dark:text-neutral-400">No notes yet.</p>
         )}
         <ul role="tree" aria-label="Folders and notes">
           <FolderChildren folder={root} depth={0} actions={actions} />
@@ -171,10 +173,10 @@ const FolderChildren = memo(function FolderChildren({
 })
 
 const rowCls =
-  'group flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm hover:bg-neutral-200/70 focus-visible:outline-2 focus-visible:outline-indigo-500'
+  'group flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm hover:bg-neutral-200/70 dark:hover:bg-neutral-700/70 focus-visible:outline-2 focus-visible:outline-indigo-500'
 // Visible on hover/focus with a mouse; always visible on touch screens.
 const rowBtnCls =
-  'shrink-0 rounded p-0.5 text-neutral-500 opacity-0 hover:bg-neutral-300/70 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
+  'shrink-0 rounded p-0.5 text-neutral-500 dark:text-neutral-400 opacity-0 hover:bg-neutral-300/70 dark:hover:bg-neutral-600/70 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
 
 function menuHandlers(node: FolderNode | NoteNode, actions: TreeActions) {
   return {
@@ -229,7 +231,7 @@ function FolderItem({ folder, depth, actions }: ItemProps & { folder: FolderNode
       <div className="relative" {...drop.handlers}>
         <button
           type="button"
-          className={`${rowCls} ${drop.over ? 'bg-indigo-100 ring-2 ring-indigo-400' : ''}`}
+          className={`${rowCls} ${drop.over ? 'bg-indigo-100 dark:bg-indigo-900/50 ring-2 ring-indigo-400' : ''}`}
           data-drop-target={drop.over || undefined}
           {...dragSource(folder.path, true, actions)}
           style={{ paddingLeft: 8 + depth * 14 }}
@@ -239,10 +241,14 @@ function FolderItem({ folder, depth, actions }: ItemProps & { folder: FolderNode
         >
           <ChevronRight
             size={14}
-            className={`shrink-0 text-neutral-400 transition-transform ${open ? 'rotate-90' : ''}`}
+            className={`shrink-0 text-neutral-400 dark:text-neutral-500 transition-transform ${open ? 'rotate-90' : ''}`}
             aria-hidden
           />
-          <FolderIcon name={folder.icon} open={open} className="shrink-0 text-neutral-600" />
+          <FolderIcon
+            name={folder.icon}
+            open={open}
+            className="shrink-0 text-neutral-600 dark:text-neutral-400"
+          />
           <span className="flex-1 truncate">{folder.name}</span>
           {actions.onNewNote && (
             <span
@@ -293,8 +299,8 @@ function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
         <NavLink
           to={notePathToUrl(note.path)}
           className={({ isActive }) =>
-            `${rowCls} ${isActive ? 'bg-indigo-100 text-indigo-900 hover:bg-indigo-100' : ''} ${
-              drop.over ? 'bg-indigo-100 ring-2 ring-indigo-400' : ''
+            `${rowCls} ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-900 dark:text-indigo-100 hover:bg-indigo-100 dark:hover:bg-indigo-900/50' : ''} ${
+              drop.over ? 'bg-indigo-100 dark:bg-indigo-900/50 ring-2 ring-indigo-400' : ''
             }`
           }
           style={{ paddingLeft: 8 + depth * 14 + 20 }}
@@ -305,7 +311,12 @@ function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
           {...menu}
           onKeyDown={onKeyDown}
         >
-          <FolderIcon name={note.icon} note size={15} className="shrink-0 text-neutral-500" />
+          <FolderIcon
+            name={note.icon}
+            note
+            size={15}
+            className="shrink-0 text-neutral-500 dark:text-neutral-400"
+          />
           <span className="flex-1 truncate">{note.name}</span>
           {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Unsaved" />}
           {actions.onNewNote && (
@@ -330,7 +341,7 @@ function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
             type="button"
             tabIndex={-1}
             aria-label={`${open ? 'Collapse' : 'Expand'} ${note.name}`}
-            className="absolute top-1/2 -translate-y-1/2 rounded p-0.5 text-neutral-400 hover:bg-neutral-300/70"
+            className="absolute top-1/2 -translate-y-1/2 rounded p-0.5 text-neutral-400 dark:text-neutral-500 hover:bg-neutral-300/70 dark:hover:bg-neutral-600/70"
             style={{ left: 8 + depth * 14 - 2 }}
             onClick={() => toggle(sub)}
           >

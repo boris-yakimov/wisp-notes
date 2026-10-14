@@ -1,5 +1,5 @@
 import { ArrowLeft, Settings as SettingsIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate } from 'react-router'
 import { AppShell } from './components/AppShell.tsx'
 import { Home } from './components/Home.tsx'
@@ -14,9 +14,11 @@ import { AuthBanner, ImportProgress, Notices, SaveStatus, StatusBar } from './co
 import { SessionProvider } from './components/Workspace.tsx'
 import type { RepoSession } from './repo/session.ts'
 import { isConfigured } from './settings/settings.ts'
+import { applyDark, useIsDark } from './settings/theme.ts'
 import { useApp } from './store/app.ts'
 
-const iconBtn = 'rounded p-1.5 text-neutral-600 hover:bg-neutral-100'
+const iconBtn =
+  'rounded p-1.5 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
 
 function SettingsLink() {
   return (
@@ -30,6 +32,8 @@ export default function App() {
   const account = useApp((s) => s.settings.account)
   const configured = useApp((s) => isConfigured(s.settings))
   const navigate = useNavigate()
+  const dark = useIsDark()
+  useLayoutEffect(() => applyDark(dark), [dark])
   return (
     <Routes>
       <Route

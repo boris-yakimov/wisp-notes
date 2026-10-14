@@ -29,7 +29,7 @@ export function AppShell({ sidebar, main, topBarRight, statusBar }: AppShellProp
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-neutral-200 px-2">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-neutral-200 dark:border-neutral-800 px-2">
         {hasSidebar && (
           <button
             type="button"
@@ -37,7 +37,7 @@ export function AppShell({ sidebar, main, topBarRight, statusBar }: AppShellProp
             aria-expanded={open}
             aria-controls="sidebar"
             onClick={() => setOpen(!open)}
-            className="rounded p-1.5 text-neutral-600 hover:bg-neutral-100"
+            className="rounded p-1.5 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             <PanelLeft size={18} />
           </button>
@@ -57,7 +57,7 @@ export function AppShell({ sidebar, main, topBarRight, statusBar }: AppShellProp
             <nav
               id="sidebar"
               aria-label="Notes"
-              className="absolute inset-y-0 left-0 z-40 w-[82vw] max-w-xs overflow-hidden border-r border-neutral-200 bg-neutral-50 shadow-xl md:static md:z-auto md:w-64 md:max-w-none md:shrink-0 md:shadow-none"
+              className="absolute inset-y-0 left-0 z-40 w-[82vw] max-w-xs overflow-hidden border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/60 shadow-xl md:static md:z-auto md:w-64 md:max-w-none md:shrink-0 md:shadow-none"
             >
               {sidebar}
             </nav>

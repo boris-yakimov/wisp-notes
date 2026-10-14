@@ -28,11 +28,11 @@ export function SaveStatus() {
     error: <AlertTriangle size={14} />,
   }[shown]
   const color = {
-    saved: 'text-neutral-500',
-    unsaved: 'text-amber-700',
-    saving: 'text-neutral-600',
-    offline: 'text-neutral-700 bg-neutral-100',
-    error: 'text-red-700 bg-red-50',
+    saved: 'text-neutral-500 dark:text-neutral-400',
+    unsaved: 'text-amber-700 dark:text-amber-400',
+    saving: 'text-neutral-600 dark:text-neutral-400',
+    offline: 'text-neutral-700 dark:text-neutral-300 bg-neutral-100 dark:bg-neutral-800',
+    error: 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950',
   }[shown]
   return (
     <span
@@ -53,7 +53,7 @@ export function StatusBar() {
   const mode = useUi((s) => s.vimMode)
   if (!mode) return null
   return (
-    <footer className="flex h-6 shrink-0 items-center border-t border-neutral-200 bg-neutral-50 px-3 font-mono text-xs text-neutral-600">
+    <footer className="flex h-6 shrink-0 items-center border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/60 px-3 font-mono text-xs text-neutral-600 dark:text-neutral-400">
       <span data-testid="vim-mode" className="font-semibold uppercase">
         -- {mode} --
       </span>
@@ -75,7 +75,9 @@ export function Notices() {
           key={n.id}
           role={n.kind === 'error' ? 'alert' : 'status'}
           className={`pointer-events-auto flex items-start gap-2 rounded border p-2.5 text-sm shadow-md ${
-            n.kind === 'error' ? 'border-red-200 bg-red-50 text-red-900' : 'border-neutral-200 bg-white'
+            n.kind === 'error'
+              ? 'border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-200'
+              : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900'
           }`}
         >
           <p className="flex-1">{n.message}</p>
@@ -83,7 +85,7 @@ export function Notices() {
             type="button"
             aria-label="Dismiss"
             onClick={() => dismissNotice(n.id)}
-            className="rounded p-0.5 hover:bg-black/5"
+            className="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
           >
             <X size={14} />
           </button>
@@ -111,12 +113,12 @@ export function AuthBanner() {
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-sm text-amber-900"
+      className="flex flex-wrap items-center gap-2 border-b border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 px-4 py-1.5 text-sm text-amber-900 dark:text-amber-200"
     >
       <KeyRound size={14} className="shrink-0" />
       <span className="flex-1">
         Google sign-in expired. Your edits are kept on this device until you continue.
-        {error && <span className="ml-1 text-red-700">{error}</span>}
+        {error && <span className="ml-1 text-red-700 dark:text-red-400">{error}</span>}
       </span>
       <button
         type="button"
@@ -137,7 +139,7 @@ export function ImportProgress() {
     <div
       role="status"
       aria-label="Import progress"
-      className="fixed bottom-8 left-3 z-50 flex items-center gap-2 rounded border border-neutral-200 bg-white p-2.5 text-sm shadow-md"
+      className="fixed bottom-8 left-3 z-50 flex items-center gap-2 rounded border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-2.5 text-sm shadow-md"
     >
       <Loader2 size={14} className="animate-spin" />
       Importing {importing.done} / {importing.total}…

@@ -6,6 +6,7 @@ import { DriveClient } from '../drive/client.ts'
 import { toDriveError } from '../drive/errors.ts'
 import { useRepo } from '../repo/session.ts'
 import { confirmDialog } from '../store/dialog.ts'
+import { THEMES, type Theme } from '../settings/settings.ts'
 import { useApp } from '../store/app.ts'
 
 interface Props {
@@ -67,16 +68,16 @@ export function SettingsPage({ onConnected }: Props) {
       {account ? (
         <>
           <h2 className="mb-1 text-lg font-semibold">Google Drive</h2>
-          <p className="mb-3 flex items-center gap-1.5 text-sm text-green-700">
+          <p className="mb-3 flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400">
             <CheckCircle2 size={16} /> Signed in as {account.email}
           </p>
-          <p className="mb-4 text-sm text-neutral-600">
+          <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
             Notes are stored in the “Wisp Notes” folder in your Google Drive.
           </p>
           <button
             type="button"
             onClick={() => void signOut()}
-            className="inline-flex items-center gap-2 rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
+            className="inline-flex items-center gap-2 rounded border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800/60"
           >
             <LogOut size={14} /> Sign out
           </button>
@@ -84,7 +85,7 @@ export function SettingsPage({ onConnected }: Props) {
       ) : (
         <>
           <h2 className="mb-1 text-lg font-semibold">Sign in</h2>
-          <p className="mb-4 text-sm text-neutral-600">
+          <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
             Wisp Notes stores your notes in a “Wisp Notes” folder in your Google Drive. It can only access
             files it created itself.
           </p>
@@ -99,7 +100,10 @@ export function SettingsPage({ onConnected }: Props) {
               Sign in with Google
             </button>
           ) : (
-            <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+            <p
+              role="alert"
+              className="rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 p-2 text-sm text-red-800 dark:text-red-300"
+            >
               No Google client ID is configured. Set <code>VITE_GOOGLE_CLIENT_ID</code> in{' '}
               <code>.env.local</code> (see README) and restart the app.
             </p>
@@ -107,7 +111,10 @@ export function SettingsPage({ onConnected }: Props) {
         </>
       )}
       {status.state === 'error' && (
-        <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+        <p
+          role="alert"
+          className="mt-4 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 p-2 text-sm text-red-800 dark:text-red-300"
+        >
           {status.message}
         </p>
       )}
@@ -120,25 +127,47 @@ function Preferences() {
   const settings = useApp((s) => s.settings)
   const updateSettings = useApp((s) => s.updateSettings)
   return (
-    <fieldset className="mt-8 space-y-2 border-t border-neutral-200 pt-4">
-      <legend className="sr-only">Editor preferences</legend>
-      <h3 className="text-sm font-semibold">Editor</h3>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={settings.vim}
-          onChange={(e) => updateSettings({ vim: e.target.checked })}
-        />
-        Vim mode
-      </label>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={settings.livePreview}
-          onChange={(e) => updateSettings({ livePreview: e.target.checked })}
-        />
-        Live preview (hide Markdown syntax outside the current line)
-      </label>
-    </fieldset>
+    <>
+      <fieldset className="mt-8 space-y-2 border-t border-neutral-200 dark:border-neutral-800 pt-4">
+        <legend className="sr-only">Appearance</legend>
+        <h3 className="text-sm font-semibold">Appearance</h3>
+        <div role="radiogroup" aria-label="Theme" className="flex gap-4">
+          {THEMES.map((t) => (
+            <label key={t} className="flex items-center gap-1.5 text-sm">
+              <input
+                type="radio"
+                name="theme"
+                value={t}
+                checked={settings.theme === t}
+                onChange={() => updateSettings({ theme: t })}
+              />
+              {themeLabels[t]}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset className="mt-6 space-y-2 border-t border-neutral-200 dark:border-neutral-800 pt-4">
+        <legend className="sr-only">Editor preferences</legend>
+        <h3 className="text-sm font-semibold">Editor</h3>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.vim}
+            onChange={(e) => updateSettings({ vim: e.target.checked })}
+          />
+          Vim mode
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.livePreview}
+            onChange={(e) => updateSettings({ livePreview: e.target.checked })}
+          />
+          Live preview (hide Markdown syntax outside the current line)
+        </label>
+      </fieldset>
+    </>
   )
 }
+
+const themeLabels: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' }

@@ -7,7 +7,7 @@ import { useImportPicker } from './useImportPicker.ts'
 import { useTreeActions } from './useTreeActions.ts'
 
 const btn =
-  'inline-flex items-center gap-2 rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50'
+  'inline-flex items-center gap-2 rounded border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800/60'
 
 /** Main pane when no note is open: errors, empty-repo onboarding, or a hint. */
 export function Home() {
@@ -25,7 +25,7 @@ export function Home() {
     return (
       <div
         role="alert"
-        className="m-4 flex items-start gap-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800 sm:m-8"
+        className="m-4 flex items-start gap-2 rounded border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 p-3 text-sm text-red-800 dark:text-red-300 sm:m-8"
       >
         <AlertCircle size={16} className="mt-0.5 shrink-0" />
         <div>
@@ -39,7 +39,10 @@ export function Home() {
   }
   if (noteCount === null) {
     return (
-      <div role="status" className="flex items-center gap-2 p-8 text-sm text-neutral-500">
+      <div
+        role="status"
+        className="flex items-center gap-2 p-8 text-sm text-neutral-500 dark:text-neutral-400"
+      >
         <Loader2 size={16} className="animate-spin" /> Loading notes…
       </div>
     )
@@ -48,7 +51,7 @@ export function Home() {
     return (
       <div className="mx-auto max-w-md p-8 text-center">
         <h2 className="mb-1 text-lg font-semibold">No notes yet</h2>
-        <p className="mb-5 text-sm text-neutral-600">
+        <p className="mb-5 text-sm text-neutral-600 dark:text-neutral-400">
           Create your first note, a folder to organize notes by category, or import existing Markdown files
           (e.g. a Notion export). Everything is saved to your Google Drive automatically.
         </p>
@@ -67,7 +70,7 @@ export function Home() {
     )
   }
   return (
-    <div className="mx-auto max-w-md p-8 text-center text-sm text-neutral-500">
+    <div className="mx-auto max-w-md p-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
       <p className="mb-4">Select a note from the sidebar, or search for one.</p>
       <div className="flex justify-center gap-2">
         <button type="button" className={btn} onClick={() => setQuickOpen(true)}>

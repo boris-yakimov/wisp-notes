@@ -46,7 +46,7 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
             onPick(matches[0])
           }
         }}
-        className="mb-3 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+        className="mb-3 w-full rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
       />
       <div role="listbox" aria-label="Icons" className="grid max-h-72 grid-cols-8 gap-1 overflow-y-auto">
         {matches.map((name) => (
@@ -58,8 +58,10 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
             aria-label={name}
             title={name}
             onClick={() => onPick(name)}
-            className={`flex aspect-square items-center justify-center rounded hover:bg-neutral-100 ${
-              name === current ? 'bg-indigo-100 text-indigo-800' : 'text-neutral-700'
+            className={`flex aspect-square items-center justify-center rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+              name === current
+                ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200'
+                : 'text-neutral-700 dark:text-neutral-300'
             }`}
           >
             <DynamicIcon name={name as IconName} size={18} />
@@ -67,7 +69,9 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
         ))}
       </div>
       {matches.length === 0 && (
-        <p className="py-4 text-center text-sm text-neutral-500">No icons match “{query}”.</p>
+        <p className="py-4 text-center text-sm text-neutral-500 dark:text-neutral-400">
+          No icons match “{query}”.
+        </p>
       )}
       <input
         ref={fileInput}
@@ -81,7 +85,7 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
         }}
       />
       {uploadError && (
-        <p role="alert" className="mt-3 text-sm text-red-700">
+        <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-400">
           {uploadError}
         </p>
       )}
@@ -90,7 +94,7 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
           type="button"
           onClick={() => fileInput.current?.click()}
           disabled={uploading}
-          className="flex items-center gap-2 rounded px-3 py-1.5 text-sm hover:bg-neutral-100 disabled:opacity-40"
+          className="flex items-center gap-2 rounded px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-40"
         >
           {isCustomIcon(current) && (
             <img src={current} alt="" width={18} height={18} className="rounded-sm" />
@@ -102,11 +106,15 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
           type="button"
           onClick={() => onPick(null)}
           disabled={!current}
-          className="rounded px-3 py-1.5 text-sm hover:bg-neutral-100 disabled:opacity-40"
+          className="rounded px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-40"
         >
           Remove icon
         </button>
-        <button type="button" onClick={onCancel} className="rounded px-3 py-1.5 text-sm hover:bg-neutral-100">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800"
+        >
           Cancel
         </button>
       </div>

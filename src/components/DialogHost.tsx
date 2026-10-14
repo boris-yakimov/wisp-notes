@@ -25,26 +25,39 @@ function DialogView({ req }: { req: DialogRequest }) {
       {req.kind === 'prompt' && <PromptBody req={req} onCancel={cancel} />}
       {req.kind === 'confirm' && (
         <>
-          <p className="mb-4 text-sm text-neutral-700">{req.message}</p>
+          <p className="mb-4 text-sm text-neutral-700 dark:text-neutral-300">{req.message}</p>
           {req.items && (
             <ul
               aria-label="Changes"
-              className="-mt-2 mb-4 max-h-72 overflow-y-auto rounded border border-neutral-200 text-sm"
+              className="-mt-2 mb-4 max-h-72 overflow-y-auto rounded border border-neutral-200 dark:border-neutral-800 text-sm"
             >
               {req.items.map((it, i) => (
                 <li
                   key={i}
-                  className="flex items-center gap-2 border-b border-neutral-100 px-2 py-1.5 last:border-b-0"
+                  className="flex items-center gap-2 border-b border-neutral-100 dark:border-neutral-800 px-2 py-1.5 last:border-b-0"
                 >
-                  <FolderIcon name={it.icon} note size={16} className="shrink-0 text-neutral-600" />
+                  <FolderIcon
+                    name={it.icon}
+                    note
+                    size={16}
+                    className="shrink-0 text-neutral-600 dark:text-neutral-400"
+                  />
                   <span className="flex-1 truncate">{it.label}</span>
-                  {it.detail && <span className="shrink-0 text-xs text-neutral-500">{it.detail}</span>}
+                  {it.detail && (
+                    <span className="shrink-0 text-xs text-neutral-500 dark:text-neutral-400">
+                      {it.detail}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" className={`${btn} hover:bg-neutral-100`} onClick={cancel}>
+            <button
+              type="button"
+              className={`${btn} hover:bg-neutral-100 dark:hover:bg-neutral-800`}
+              onClick={cancel}
+            >
               Cancel
             </button>
             <button
@@ -60,7 +73,7 @@ function DialogView({ req }: { req: DialogRequest }) {
       )}
       {req.kind === 'choose' && <ChooseBody req={req} onCancel={cancel} />}
       {req.kind === 'icon' && (
-        <Suspense fallback={<p className="text-sm text-neutral-500">Loading icons…</p>}>
+        <Suspense fallback={<p className="text-sm text-neutral-500 dark:text-neutral-400">Loading icons…</p>}>
           <IconPicker current={req.current} onPick={req.resolve} onCancel={cancel} />
         </Suspense>
       )}
@@ -101,10 +114,14 @@ function PromptBody({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         autoComplete="off"
-        className="mb-4 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+        className="mb-4 w-full rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
       />
       <div className="flex justify-end gap-2">
-        <button type="button" className={`${btn} hover:bg-neutral-100`} onClick={onCancel}>
+        <button
+          type="button"
+          className={`${btn} hover:bg-neutral-100 dark:hover:bg-neutral-800`}
+          onClick={onCancel}
+        >
           Cancel
         </button>
         <button
@@ -152,7 +169,7 @@ function ChooseBody({
             req.resolve(shown[i].value)
           }
         }}
-        className="mb-2 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+        className="mb-2 w-full rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
       />
       <ul role="listbox" aria-label={req.label} className="mb-3 max-h-64 overflow-y-auto">
         {shown.map((o, k) => (
@@ -162,17 +179,23 @@ function ChooseBody({
             aria-selected={k === i}
             onMouseMove={() => k !== i && setActive(k)}
             onClick={() => req.resolve(o.value)}
-            className={`cursor-pointer truncate rounded px-2 py-1.5 text-sm ${k === i ? 'bg-indigo-50' : ''}`}
+            className={`cursor-pointer truncate rounded px-2 py-1.5 text-sm ${k === i ? 'bg-indigo-50 dark:bg-indigo-950/50' : ''}`}
           >
             {o.label}
           </li>
         ))}
         {shown.length === 0 && (
-          <li className="px-2 py-3 text-center text-sm text-neutral-500">No folders match.</li>
+          <li className="px-2 py-3 text-center text-sm text-neutral-500 dark:text-neutral-400">
+            No folders match.
+          </li>
         )}
       </ul>
       <div className="flex justify-end">
-        <button type="button" className={`${btn} hover:bg-neutral-100`} onClick={onCancel}>
+        <button
+          type="button"
+          className={`${btn} hover:bg-neutral-100 dark:hover:bg-neutral-800`}
+          onClick={onCancel}
+        >
           Cancel
         </button>
       </div>
@@ -231,7 +254,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="dialog-title"
-        className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl"
+        className="w-full max-w-md rounded-lg bg-white dark:bg-neutral-900 p-4 shadow-xl"
       >
         <h2 id="dialog-title" className="mb-3 text-base font-semibold">
           {title}

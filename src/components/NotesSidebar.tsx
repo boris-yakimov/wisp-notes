@@ -19,7 +19,8 @@ import { Sidebar } from './Sidebar.tsx'
 import { useImportPicker } from './useImportPicker.ts'
 import { useTreeActions } from './useTreeActions.ts'
 
-const headerBtn = 'rounded p-1.5 text-neutral-600 hover:bg-neutral-200/70'
+const headerBtn =
+  'rounded p-1.5 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/70 dark:hover:bg-neutral-700/70'
 
 /** Sidebar with header buttons, context menus and note/folder operations. */
 export function NotesSidebar() {
@@ -105,14 +106,16 @@ export function NotesSidebar() {
         onMove={onMove}
         onRename={onRename}
         header={
-          <div className="flex items-center gap-0.5 border-b border-neutral-200 px-2 py-1">
+          <div className="flex items-center gap-0.5 border-b border-neutral-200 dark:border-neutral-800 px-2 py-1">
             <button
               type="button"
               onClick={() => setQuickOpen(true)}
-              className="mr-auto flex flex-1 items-center gap-1.5 rounded px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-200/70"
+              className="mr-auto flex flex-1 items-center gap-1.5 rounded px-2 py-1 text-sm text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/70 dark:hover:bg-neutral-700/70"
             >
               <Search size={14} /> Search
-              <kbd className="ml-auto hidden font-sans text-xs text-neutral-400 sm:inline">Ctrl K</kbd>
+              <kbd className="ml-auto hidden font-sans text-xs text-neutral-400 dark:text-neutral-500 sm:inline">
+                Ctrl K
+              </kbd>
             </button>
             <button
               type="button"

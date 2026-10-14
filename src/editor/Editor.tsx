@@ -27,6 +27,8 @@ export interface EditorProps {
   onVimMode?: (mode: string | null) => void
   vimEnabled: boolean
   livePreviewEnabled: boolean
+  /** Dark color scheme (CodeMirror's built-in panels/selection; our colors come from CSS variables). */
+  dark?: boolean
   readOnly?: boolean
   autoFocus?: boolean
   /** Selected and scrolled into view on mount (search match). */
@@ -49,6 +51,7 @@ function defineExCommands() {
 
 const vimExt = (on: boolean): Extension => (on ? vim() : [])
 const previewExt = (on: boolean): Extension => (on ? livePreview() : [])
+const darkExt = (on: boolean): Extension => EditorView.darkTheme.of(on)
 const readOnlyExt = (ro: boolean): Extension => [EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]
 
 /** CodeMirror 6 Markdown editor with optional vim mode and live preview. Remount (key) per note. */
@@ -57,7 +60,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   const viewRef = useRef<EditorView | null>(null)
   const propsRef = useRef(props)
   propsRef.current = props
-  const compartments = useRef({ vim: new Compartment(), preview: new Compartment(), ro: new Compartment() })
+  const compartments = useRef({
+    vim: new Compartment(),
+    preview: new Compartment(),
+    ro: new Compartment(),
+    dark: new Compartment(),
+  })
 
   useEffect(() => {
     defineExCommands()
@@ -79,6 +87,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: true }),
           markdownHighlight,
           editorTheme,
+          c.dark.of(darkExt(!!p.dark)),
           search({ top: true }),
           highlightSelectionMatches(),
           placeholder('Start writing…'),
@@ -148,6 +157,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   useEffect(() => {
     viewRef.current?.dispatch({ effects: compartments.current.ro.reconfigure(readOnlyExt(!!props.readOnly)) })
   }, [props.readOnly])
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: compartments.current.dark.reconfigure(darkExt(!!props.dark)) })
+  }, [props.dark])
 
   useImperativeHandle(ref, () => ({
     replaceContent(text) {

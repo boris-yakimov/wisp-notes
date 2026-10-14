@@ -1,5 +1,9 @@
 /** Settings persisted per device in localStorage. */
 
+export type Theme = 'system' | 'light' | 'dark'
+
+export const THEMES: readonly Theme[] = ['system', 'light', 'dark']
+
 export interface Account {
   email: string
   name: string
@@ -10,6 +14,7 @@ export interface Settings {
   account: Account | null
   vim: boolean
   livePreview: boolean
+  theme: Theme
 }
 
 const KEY = 'wisp-notes:settings'
@@ -18,6 +23,7 @@ export const defaultSettings: Settings = {
   account: null,
   vim: true,
   livePreview: true,
+  theme: 'system',
 }
 
 export function loadSettings(): Settings {
@@ -27,7 +33,8 @@ export function loadSettings(): Settings {
     const s = { ...defaultSettings, ...(JSON.parse(raw) as Partial<Settings>) }
     // Settings from the GitHub version have no account.
     if (!s.account || typeof s.account.email !== 'string') s.account = null
-    return { account: s.account, vim: s.vim, livePreview: s.livePreview }
+    if (!THEMES.includes(s.theme)) s.theme = defaultSettings.theme
+    return { account: s.account, vim: s.vim, livePreview: s.livePreview, theme: s.theme }
   } catch {
     return { ...defaultSettings }
   }
