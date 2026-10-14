@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { setupFakeDrive } from './test/msw.ts'
 import { getEditorView, pressKey, renderApp, typeInEditor } from './test/renderApp.tsx'
@@ -150,5 +150,28 @@ describe('App: Ctrl+click links', () => {
     ctrlClick('inbox')
     await waitFor(() => expect(editorText()).toBe('# Inbox\n\nCafé ☕ and 🎉'))
     open.mockRestore()
+  })
+})
+
+describe('App: sub-pages', () => {
+  it("lists a note's sub-pages above the editor and opens them", async () => {
+    fake.drive.write('Work/Plan/Tasks.md', 'Do things')
+    fake.drive.write('Work/Plan/Ideas.md', 'Think')
+    fake.drive.write('Work/Plan/Tasks/Today.md', 'Grandchild')
+    renderApp('/n/Work/Plan.md')
+    const subs = await screen.findByRole('navigation', { name: 'Sub-pages' })
+    expect(subs).toHaveTextContent('2 sub-pages:')
+    const links = within(subs).getAllByRole('link')
+    expect(links.map((l) => l.textContent)).toEqual(['Ideas', 'Tasks']) // direct children only
+    await userEvent.click(within(subs).getByRole('link', { name: 'Tasks' }))
+    await waitFor(() => expect(editorText()).toBe('Do things'))
+    // Tasks has its own sub-page
+    expect(await screen.findByRole('navigation', { name: 'Sub-pages' })).toHaveTextContent('Today')
+  })
+
+  it('shows nothing for notes without sub-pages', async () => {
+    renderApp('/n/Inbox.md')
+    await waitFor(() => expect(editorText()).toContain('Inbox'))
+    expect(screen.queryByRole('navigation', { name: 'Sub-pages' })).not.toBeInTheDocument()
   })
 })

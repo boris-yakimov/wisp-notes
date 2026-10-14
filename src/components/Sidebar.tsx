@@ -3,9 +3,10 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink } from 'react-router'
 import { childFolderOf, dirname, isInside, notePathToUrl } from '../repo/paths.ts'
 import { useRepo } from '../repo/session.ts'
-import { buildTree, hasChildren, type FolderNode, type NoteNode } from '../repo/tree.ts'
+import { hasChildren, type FolderNode, type NoteNode } from '../repo/tree.ts'
 import { useUi } from '../store/ui.ts'
 import { FolderIcon } from './FolderIcon.tsx'
+import { useTree } from './useTree.ts'
 
 export interface TreeActions {
   /** Open the context menu for a node at screen coordinates. */
@@ -106,16 +107,8 @@ export function Sidebar({
   header,
 }: TreeActions & { header?: React.ReactNode }) {
   const snapshot = useRepo((s) => s.snapshot)
-  const metas = useRepo((s) => s.metas)
   const phase = useRepo((s) => s.phase)
-  const root = useMemo(() => {
-    const entries = snapshot?.entries ?? []
-    return buildTree(
-      entries.filter((e) => !e.folder).map((e) => e.path),
-      metas,
-      entries.filter((e) => e.folder).map((e) => e.path),
-    )
-  }, [snapshot, metas])
+  const root = useTree()
   const actions = useMemo(
     () => ({ onMenu, onNewNote, onMove, onRename }),
     [onMenu, onNewNote, onMove, onRename],

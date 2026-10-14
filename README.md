@@ -41,7 +41,7 @@ npm ci
   menu).
 - **Sub-notes**, like Notion pages: use **+** on a note row (or **New sub-note** in its menu), or drag a note onto
   another note. Sub-notes of `Plan.md` live in a `Plan/` folder next to it, the same layout as a Notion export, so
-  imported Notion pages show up nested.
+  imported Notion pages show up nested. A note with sub-notes lists them as links in a strip above its text.
 - **Icons**: **Change icon** in a folder's or note's menu, then pick one or **Upload image…** your own.
   **Auto-assign icons** on a folder guesses icons from names (Docker, Kubernetes, AWS, …) for everything inside that
   has none yet, shows them, and saves after you confirm.

@@ -12,6 +12,7 @@ import { useRepo } from '../repo/session.ts'
 import { useResolvedTheme } from '../settings/theme.ts'
 import { useApp } from '../store/app.ts'
 import { useUi } from '../store/ui.ts'
+import { SubPages } from './SubPages.tsx'
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; content: string }
 
@@ -107,6 +108,7 @@ function NoteView({ path }: { path: string }) {
           This note was moved or deleted.
         </p>
       )}
+      <SubPages path={path} />
       <div className="min-h-0 flex-1">
         <Suspense fallback={<Loading />}>
           <Editor

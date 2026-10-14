@@ -138,6 +138,20 @@ export function buildTree(
   return root
 }
 
+/** The note at `path` in the tree, or undefined. */
+export function findNote(root: FolderNode, path: string): NoteNode | undefined {
+  for (const n of root.notes) {
+    if (n.path === path) return n
+    const inner = n.children && findNote(n.children, path)
+    if (inner) return inner
+  }
+  for (const f of root.folders) {
+    const inner = findNote(f, path)
+    if (inner) return inner
+  }
+  return undefined
+}
+
 /** Does the note have visible sub-notes? */
 export function hasChildren(note: NoteNode): boolean {
   return !!note.children && (note.children.folders.length > 0 || note.children.notes.length > 0)

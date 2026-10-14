@@ -1,4 +1,4 @@
-import { buildTree, hasChildren, parseMeta } from './tree.ts'
+import { buildTree, findNote, hasChildren, parseMeta } from './tree.ts'
 import { conflictPath, noteTitle, validateName } from './paths.ts'
 
 const names = (f: ReturnType<typeof buildTree>) => ({
@@ -89,5 +89,16 @@ describe('paths', () => {
     expect(conflictPath('W/Plan.md', d, () => false)).toBe('W/Plan (conflict 2026-10-11).md')
     const taken = new Set(['W/Plan (conflict 2026-10-11).md'])
     expect(conflictPath('W/Plan.md', d, (p) => taken.has(p))).toBe('W/Plan (conflict 2026-10-11 2).md')
+  })
+})
+
+describe('findNote', () => {
+  it('finds top-level, nested and sub-notes', () => {
+    const root = buildTree(['A.md', 'Work/Plan.md', 'Work/Plan/Tasks.md', 'Work/Plan/Tasks/Today.md'])
+    expect(findNote(root, 'A.md')?.name).toBe('A')
+    const plan = findNote(root, 'Work/Plan.md')
+    expect(plan?.children?.notes.map((n) => n.path)).toEqual(['Work/Plan/Tasks.md'])
+    expect(findNote(root, 'Work/Plan/Tasks/Today.md')?.name).toBe('Today')
+    expect(findNote(root, 'Nope.md')).toBeUndefined()
   })
 })
