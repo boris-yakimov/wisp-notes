@@ -8,11 +8,13 @@ import {
   importOp,
   moveOp,
   moveTargets,
+  placeOp,
   renameFolderOp,
   renameNoteOp,
   setFolderIconOp,
   setIconsOp,
   setNoteIconOp,
+  shiftOp,
   suggestIcons,
 } from './ops.ts'
 
@@ -275,5 +277,51 @@ describe('operation builders', () => {
         'DevOps/Kubernetes/_meta.json': { notes: { 'Helm.md': 'ship-wheel' } },
       })
     })
+  })
+})
+
+describe('custom order', () => {
+  const es: Entry[] = [f('A.md'), f('B.md'), d('Docs'), f('Docs/X.md'), f('Docs/Y.md')]
+  const metaOf = (ops: { path: string; content?: unknown }[], path = '_meta.json') =>
+    JSON.parse(ops.find((o) => o.path === path)!.content as string)
+
+  it('places an item before/after a sibling, writing the full order', () => {
+    const op = placeOp('B.md', 'A.md', 'before', es)
+    expect(op.ops).toHaveLength(1)
+    expect(metaOf(op.ops)).toEqual({ order: ['Docs', 'B.md', 'A.md'] })
+  })
+
+  it('shifts within the current order and keeps other meta fields', () => {
+    const metas = { '': { icon: 'star', order: ['B.md', 'A.md', 'Docs'] } }
+    expect(metaOf(shiftOp('Docs', -1, es, metas).ops)).toEqual({
+      icon: 'star',
+      order: ['B.md', 'Docs', 'A.md'],
+    })
+    expect(shiftOp('B.md', -1, es, metas).ops).toEqual([]) // already first
+  })
+
+  it('moves into another container at the drop position, updating both orders', () => {
+    const metas = { '': { order: ['A.md', 'B.md', 'Docs'] }, Docs: { notes: { 'X.md': 'cat' } } }
+    const op = placeOp('A.md', 'Docs/Y.md', 'before', es, metas)
+    expect(op.ops[0]).toEqual({ kind: 'rename', path: 'A.md', to: 'Docs/A.md' })
+    expect(metaOf(op.ops)).toEqual({ order: ['B.md', 'Docs'] })
+    expect(metaOf(op.ops, 'Docs/_meta.json')).toEqual({
+      notes: { 'X.md': 'cat' },
+      order: ['X.md', 'A.md', 'Y.md'],
+    })
+    expect(op.moved).toEqual({ 'A.md': 'Docs/A.md' })
+  })
+
+  it('drops deleted items from the order', () => {
+    const metas = { Docs: { order: ['Y.md', 'X.md'] } }
+    expect(metaOf(deleteNoteOp('Docs/Y.md', es, metas).ops, 'Docs/_meta.json')).toEqual({ order: ['X.md'] })
+    expect(metaOf(deleteFolderOp('Docs', es, { '': { order: ['Docs', 'A.md'] } }).ops)).toEqual({
+      order: ['A.md'],
+    })
+  })
+
+  it('keeps the position when a folder is renamed', () => {
+    const op = renameFolderOp('Docs', 'Papers', es, { '': { order: ['Docs', 'A.md'] } })
+    expect(metaOf(op.ops)).toEqual({ order: ['Papers', 'A.md'] })
   })
 })

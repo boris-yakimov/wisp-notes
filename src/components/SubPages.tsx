@@ -7,7 +7,7 @@ import { useTree } from './useTree.ts'
 /** Links to a note's sub-pages, shown above the editor (derived from the tree, not stored in the note). */
 export function SubPages({ path }: { path: string }) {
   const note = findNote(useTree(), path)
-  const subs: NoteNode[] = note?.children?.notes ?? []
+  const subs = (note?.children?.items ?? []).filter((n): n is NoteNode => n.kind === 'note')
   if (!subs.length) return null
   return (
     <nav

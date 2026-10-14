@@ -17,6 +17,30 @@ export interface TreeActions {
   onMove?: (path: string, toFolder: string) => void
   /** Rename a note or folder (F2 on its row). */
   onRename?: (node: FolderNode | NoteNode) => void
+  /** Reorder: put a dragged item right before/after `target` (moving it into target's container). */
+  onPlace?: (path: string, target: string, where: 'before' | 'after') => void
+  /** Move an item up (-1) or down (+1) among its siblings (Alt+↑/↓). */
+  onShift?: (path: string, delta: -1 | 1) => void
+}
+
+type Zone = 'into' | 'before' | 'after'
+
+/** Can the dragged item be placed next to `target` (reorder)? */
+function canPlace(target: string): boolean {
+  if (!dragging || dragging.path === target) return false
+  const own = dragging.folder ? dragging.path : childFolderOf(dragging.path)
+  const container = dirname(target)
+  return !(container !== '' && isInside(container, own))
+}
+
+/** Top and bottom quarter of a row place before/after it; the middle drops into it. */
+function zoneAt(e: React.DragEvent, allowInto: boolean): Zone {
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const y = (e.clientY - r.top) / (r.height || 1)
+  const edge = allowInto ? 0.25 : 0.5
+  if (y < edge) return 'before'
+  if (y > 1 - edge) return 'after'
+  return 'into'
 }
 
 /** Drag-and-drop payload type for tree items. */
@@ -50,35 +74,49 @@ function dragSource(path: string, folder: boolean, actions: TreeActions) {
   }
 }
 
-/** Drop handlers for a folder target. Hovering a closed folder for a moment expands it. */
-function useDropTarget(folder: string, actions: TreeActions, onHoverOpen?: () => void) {
-  const [over, setOver] = useState(false)
+/**
+ * Drop handlers for a row (or the empty area: `place` omitted). Dropping in the middle moves the item
+ * into `into` (a folder, or under a note); near the top/bottom edge of a row it is placed before/after
+ * that row. Hovering a closed folder for a moment expands it.
+ */
+function useDropTarget(into: string, actions: TreeActions, onHoverOpen?: () => void, place?: string) {
+  const [over, setOver] = useState<Zone | null>(null)
   const depth = useRef(0)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
-  if (!actions.onMove) return { over: false, handlers: {} }
+  if (!actions.onMove) return { over: null, handlers: {} }
+  const zone = (e: React.DragEvent): Zone | null => {
+    if (!dragging) return null
+    const z = place && actions.onPlace ? zoneAt(e, canDrop(into)) : 'into'
+    if (z === 'into') return canDrop(into) ? 'into' : null
+    return canPlace(place!) ? z : null
+  }
   const reset = () => {
     depth.current = 0
-    setOver(false)
+    setOver(null)
     clearTimeout(timer.current)
   }
   return {
     over,
     handlers: {
       onDragEnter: (e: React.DragEvent) => {
-        if (!canDrop(folder)) return
+        const z = zone(e)
+        if (!z) return
         e.preventDefault()
         e.stopPropagation()
-        if (depth.current++ === 0) {
-          setOver(true)
-          if (onHoverOpen) timer.current = setTimeout(onHoverOpen, 700)
-        }
+        if (depth.current++ === 0 && onHoverOpen && z === 'into') timer.current = setTimeout(onHoverOpen, 700)
+        setOver(z)
       },
       onDragOver: (e: React.DragEvent) => {
-        if (!canDrop(folder)) return
+        const z = zone(e)
+        if (!z) {
+          if (over) setOver(null)
+          return
+        }
         e.preventDefault()
         e.stopPropagation()
         e.dataTransfer.dropEffect = 'move'
+        if (z !== over) setOver(z)
       },
       onDragLeave: (e: React.DragEvent) => {
         if (!over) return
@@ -87,15 +125,29 @@ function useDropTarget(folder: string, actions: TreeActions, onHoverOpen?: () =>
       },
       onDrop: (e: React.DragEvent) => {
         const path = e.dataTransfer.getData(DND_TYPE) || dragging?.path
+        const z = zone(e)
         reset()
-        if (!path || !canDrop(folder)) return
+        if (!path || !z) return
         e.preventDefault()
         e.stopPropagation()
         dragging = null
-        actions.onMove!(path, folder)
+        if (z === 'into') actions.onMove!(path, into)
+        else actions.onPlace!(path, place!, z)
       },
     },
   }
+}
+
+/** Line shown where a dragged item would be placed. */
+function DropLine({ zone }: { zone: Zone | null }) {
+  if (zone !== 'before' && zone !== 'after') return null
+  return (
+    <div
+      aria-hidden
+      data-drop-line={zone}
+      className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded bg-indigo-500 ${zone === 'before' ? '-top-px' : '-bottom-px'}`}
+    />
+  )
 }
 
 /** Folder tree built from the current snapshot. */
@@ -104,14 +156,16 @@ export function Sidebar({
   onNewNote,
   onMove,
   onRename,
+  onPlace,
+  onShift,
   header,
 }: TreeActions & { header?: React.ReactNode }) {
   const snapshot = useRepo((s) => s.snapshot)
   const phase = useRepo((s) => s.phase)
   const root = useTree()
   const actions = useMemo(
-    () => ({ onMenu, onNewNote, onMove, onRename }),
-    [onMenu, onNewNote, onMove, onRename],
+    () => ({ onMenu, onNewNote, onMove, onRename, onPlace, onShift }),
+    [onMenu, onNewNote, onMove, onRename, onPlace, onShift],
   )
   // Dropping on empty space (or the top-level area) moves to the top level.
   const rootDrop = useDropTarget('', actions)
@@ -155,12 +209,13 @@ const FolderChildren = memo(function FolderChildren({
 }: ItemProps & { folder: FolderNode }) {
   return (
     <>
-      {folder.folders.map((f) => (
-        <FolderItem key={f.path} folder={f} depth={depth} actions={actions} />
-      ))}
-      {folder.notes.map((n) => (
-        <NoteItem key={n.path} note={n} depth={depth} actions={actions} />
-      ))}
+      {folder.items.map((n) =>
+        n.kind === 'folder' ? (
+          <FolderItem key={n.path} folder={n} depth={depth} actions={actions} />
+        ) : (
+          <NoteItem key={n.path} note={n} depth={depth} actions={actions} />
+        ),
+      )}
     </>
   )
 })
@@ -179,6 +234,17 @@ function menuHandlers(node: FolderNode | NoteNode, actions: TreeActions) {
       actions.onMenu(node, e.clientX, e.clientY)
     },
     onKeyDown: (e: React.KeyboardEvent) => {
+      if (
+        e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+        actions.onShift
+      ) {
+        e.preventDefault()
+        actions.onShift(node.path, e.key === 'ArrowUp' ? -1 : 1)
+        return
+      }
       if (e.key === 'F2' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && actions.onRename) {
         e.preventDefault()
         actions.onRename(node)
@@ -218,14 +284,14 @@ function FolderItem({ folder, depth, actions }: ItemProps & { folder: FolderNode
   const open = useUi((s) => !!s.expanded[folder.path])
   const toggle = useUi((s) => s.toggleFolder)
   const setExpanded = useUi((s) => s.setExpanded)
-  const drop = useDropTarget(folder.path, actions, () => setExpanded(folder.path, true))
+  const drop = useDropTarget(folder.path, actions, () => setExpanded(folder.path, true), folder.path)
   return (
     <li role="treeitem" aria-expanded={open} aria-label={folder.name}>
       <div className="relative" {...drop.handlers}>
         <button
           type="button"
-          className={`${rowCls} ${drop.over ? 'bg-indigo-100 dark:bg-indigo-900/50 ring-2 ring-indigo-400' : ''}`}
-          data-drop-target={drop.over || undefined}
+          className={`${rowCls} ${drop.over === 'into' ? 'bg-indigo-100 dark:bg-indigo-900/50 ring-2 ring-indigo-400' : ''}`}
+          data-drop-target={drop.over === 'into' || undefined}
           {...dragSource(folder.path, true, actions)}
           style={{ paddingLeft: 8 + depth * 14 }}
           onClick={() => toggle(folder.path)}
@@ -259,6 +325,7 @@ function FolderItem({ folder, depth, actions }: ItemProps & { folder: FolderNode
           )}
           <MoreButton node={folder} actions={actions} />
         </button>
+        <DropLine zone={drop.over} />
       </div>
       {open && (
         <ul role="group">
@@ -278,7 +345,7 @@ function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
   const toggle = useUi((s) => s.toggleFolder)
   const setExpanded = useUi((s) => s.setExpanded)
   // Dropping onto a note nests the item under it (like Notion); hovering expands its sub-notes.
-  const drop = useDropTarget(sub, actions, () => setExpanded(sub, true))
+  const drop = useDropTarget(sub, actions, () => setExpanded(sub, true), note.path)
   const menu = menuHandlers(note, actions)
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (nested && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
@@ -293,13 +360,13 @@ function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
           to={notePathToUrl(note.path)}
           className={({ isActive }) =>
             `${rowCls} ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-900 dark:text-indigo-100 hover:bg-indigo-100 dark:hover:bg-indigo-900/50' : ''} ${
-              drop.over ? 'bg-indigo-100 dark:bg-indigo-900/50 ring-2 ring-indigo-400' : ''
+              drop.over === 'into' ? 'bg-indigo-100 dark:bg-indigo-900/50 ring-2 ring-indigo-400' : ''
             }`
           }
           style={{ paddingLeft: 8 + depth * 14 + 20 }}
           onClick={closeSidebarOnMobile}
           data-path={note.path}
-          data-drop-target={drop.over || undefined}
+          data-drop-target={drop.over === 'into' || undefined}
           {...dragSource(note.path, false, actions)}
           {...menu}
           onKeyDown={onKeyDown}
@@ -329,6 +396,7 @@ function NoteItem({ note, depth, actions }: ItemProps & { note: NoteNode }) {
           )}
           <MoreButton node={note} actions={actions} />
         </NavLink>
+        <DropLine zone={drop.over} />
         {nested && (
           <button
             type="button"

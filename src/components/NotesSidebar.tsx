@@ -1,4 +1,6 @@
 import {
+  ArrowDown,
+  ArrowUp,
   FilePlus,
   FolderInput,
   FolderOutput,
@@ -11,12 +13,13 @@ import {
   Upload,
 } from 'lucide-react'
 import { useCallback, useState } from 'react'
-import { childFolderOf } from '../repo/paths.ts'
-import type { FolderNode, NoteNode } from '../repo/tree.ts'
+import { childFolderOf, dirname } from '../repo/paths.ts'
+import { findContainer, type FolderNode, type NoteNode } from '../repo/tree.ts'
 import { useUi } from '../store/ui.ts'
 import { ContextMenu, type MenuItem } from './ContextMenu.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { useImportPicker } from './useImportPicker.ts'
+import { useTree } from './useTree.ts'
 import { useTreeActions } from './useTreeActions.ts'
 
 const headerBtn =
@@ -33,7 +36,24 @@ export function NotesSidebar() {
     [],
   )
   const close = useCallback(() => setMenu(null), [])
-  const { newNote, move, rename } = actions
+  const { newNote, move, rename, place, shift } = actions
+  const onPlace = useCallback(
+    (path: string, target: string, where: 'before' | 'after') => void place(path, target, where),
+    [place],
+  )
+  const onShift = useCallback((path: string, delta: -1 | 1) => void shift(path, delta), [shift])
+  const root = useTree()
+  /** "Move up" / "Move down", only where possible. */
+  const orderItems = (node: FolderNode | NoteNode): MenuItem[] => {
+    const siblings = findContainer(root, dirname(node.path))?.items ?? []
+    const i = siblings.findIndex((n) => n.path === node.path)
+    const out: MenuItem[] = []
+    if (i > 0)
+      out.push({ label: 'Move up', icon: <ArrowUp size={14} />, onSelect: () => onShift(node.path, -1) })
+    if (i >= 0 && i < siblings.length - 1)
+      out.push({ label: 'Move down', icon: <ArrowDown size={14} />, onSelect: () => onShift(node.path, 1) })
+    return out
+  }
   const onNewNote = useCallback((folder: string) => void newNote(folder), [newNote])
   const onMove = useCallback((path: string, toFolder: string) => void move(path, toFolder), [move])
   const onRename = useCallback((node: FolderNode | NoteNode) => void rename(node), [rename])
@@ -64,6 +84,7 @@ export function NotesSidebar() {
         },
         { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => void actions.rename(node) },
         { label: 'Move to…', icon: <FolderOutput size={14} />, onSelect: () => void actions.moveTo(node) },
+        ...orderItems(node),
         {
           label: 'Change icon',
           icon: <ImageIcon size={14} />,
@@ -97,6 +118,7 @@ export function NotesSidebar() {
       ...create,
       { label: 'Rename', icon: <Pencil size={14} />, onSelect: () => void actions.rename(node) },
       { label: 'Move to…', icon: <FolderOutput size={14} />, onSelect: () => void actions.moveTo(node) },
+      ...orderItems(node),
       { label: 'Change icon', icon: <ImageIcon size={14} />, onSelect: () => void actions.changeIcon(node) },
       autoItem(node),
       {
@@ -115,6 +137,8 @@ export function NotesSidebar() {
         onNewNote={onNewNote}
         onMove={onMove}
         onRename={onRename}
+        onPlace={onPlace}
+        onShift={onShift}
         header={
           <div className="flex items-center gap-0.5 border-b border-neutral-200 dark:border-neutral-800 px-2 py-1">
             <button

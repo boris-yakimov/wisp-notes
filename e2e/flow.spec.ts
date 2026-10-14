@@ -261,3 +261,36 @@ test('a note with "/" in its name opens from a deep link and survives a reload',
   await expect(page.locator('.cm-content')).toContainText('placeholder')
   await expect(page).toHaveTitle('CI/CD · Wisp Notes')
 })
+
+test('drag to the edge of a row to reorder; the middle still nests', async ({ page, drive, isMobile }) => {
+  test.skip(isMobile, 'HTML5 drag and drop is mouse-only; phones use "Move up/down"')
+  await signedIn(page, false)
+  await page.goto('/')
+  const nav = await ensureSidebar(page)
+  const top = () =>
+    nav
+      .locator('[role=tree] > [role=treeitem]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))
+  await expect.poll(top).toEqual(['Home', 'Work', 'Inbox'])
+
+  // Top edge of "Home": Inbox goes before it
+  const home = nav.getByRole('button', { name: /^Home/ })
+  await nav.getByRole('link', { name: /^Inbox/ }).dragTo(home, { targetPosition: { x: 40, y: 2 } })
+  await expect.poll(top).toEqual(['Inbox', 'Home', 'Work'])
+  await expect.poll(() => drive.files()['_meta.json']).toContain('"Inbox.md"')
+  expect(drive.files()['Inbox.md']).toBeDefined() // reordered, not moved
+
+  // Bottom edge of "Work": Home goes after it
+  const work = nav.getByRole('button', { name: /^Work/ })
+  const box = (await work.boundingBox())!
+  await home.dragTo(work, { targetPosition: { x: 40, y: box.height - 2 } })
+  await expect.poll(top).toEqual(['Inbox', 'Work', 'Home'])
+
+  // Order survives a reload (read back from Drive)
+  await page.reload()
+  await expect.poll(top).toEqual(['Inbox', 'Work', 'Home'])
+
+  // Middle of a folder row still moves the item into it
+  await nav.getByRole('link', { name: /^Inbox/ }).dragTo(work)
+  await expect.poll(() => drive.files()['Work/Inbox.md']).toBe('# Inbox\n\nThings to sort.')
+})

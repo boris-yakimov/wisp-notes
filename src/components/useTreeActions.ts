@@ -16,10 +16,12 @@ import {
   deleteFolderOp,
   deleteNoteOp,
   moveOp,
+  placeOp,
   moveTargets,
   OpError,
   renameFolderOp,
   renameNoteOp,
+  shiftOp,
   setFolderIconOp,
   setIconsOp,
   setNoteIconOp,
@@ -129,7 +131,7 @@ export function useTreeActions() {
         () =>
           isNote
             ? renameNoteOp(node.path, name, entries(), metas())
-            : renameFolderOp(node.path, name, entries()),
+            : renameFolderOp(node.path, name, entries(), metas()),
         'rename',
         (op) => {
           const key = (p: string) => (isNote ? childFolderOf(p) : p)
@@ -157,7 +159,10 @@ export function useTreeActions() {
       })
       if (!ok) return
       await run(
-        () => (isNote ? deleteNoteOp(node.path, entries(), metas()) : deleteFolderOp(node.path, entries())),
+        () =>
+          isNote
+            ? deleteNoteOp(node.path, entries(), metas())
+            : deleteFolderOp(node.path, entries(), metas()),
         'delete',
       )
       if (!isNote && open && isInside(open, node.path)) navigate('/', { replace: true })
@@ -252,6 +257,19 @@ export function useTreeActions() {
   )
 
   /** Upload local files (keeping folder structure) into a folder. */
+  /** Drag-and-drop reordering: put `path` before/after `target` (moving it there if needed). */
+  const place = useCallback(
+    (path: string, target: string, where: 'before' | 'after') =>
+      run(() => placeOp(path, target, where, entries(), metas()), 'move it'),
+    [run],
+  )
+
+  /** Move up/down among its siblings (menu, Alt+↑/↓). */
+  const shift = useCallback(
+    (path: string, delta: -1 | 1) => run(() => shiftOp(path, delta, entries(), metas()), 'move it'),
+    [run],
+  )
+
   const importFiles = useCallback(
     async (folder: string, files: ImportFile[]) => {
       if (!files.length) return
@@ -267,5 +285,17 @@ export function useTreeActions() {
     [session, setExpanded],
   )
 
-  return { newNote, newFolder, rename, remove, move, moveTo, changeIcon, autoIcons, importFiles }
+  return {
+    newNote,
+    newFolder,
+    rename,
+    remove,
+    move,
+    moveTo,
+    place,
+    shift,
+    changeIcon,
+    autoIcons,
+    importFiles,
+  }
 }

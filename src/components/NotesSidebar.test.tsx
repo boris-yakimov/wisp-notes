@@ -223,6 +223,7 @@ describe('note & folder operations (T10)', () => {
       'Import folder…',
       'Rename',
       'Move to…',
+      'Move down', // first item at the top level: no "Move up"
       'Change icon',
       'Auto-assign icons',
       'Delete',
@@ -231,7 +232,7 @@ describe('note & folder operations (T10)', () => {
     await userEvent.keyboard('{ArrowDown}')
     expect(items[1]).toHaveFocus()
     await userEvent.keyboard('{ArrowUp}{ArrowUp}')
-    expect(items[8]).toHaveFocus() // wraps to the last item
+    expect(items[9]).toHaveFocus() // wraps to the last item
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
@@ -614,5 +615,47 @@ describe('slashes in names', () => {
     expect(link).toHaveAttribute('aria-current', 'page')
     // The real folder "Q3" is a separate item, not mistaken for part of the note's name
     expect(screen.getByRole('button', { name: /^Q3$/ })).toBeInTheDocument()
+  })
+})
+
+describe('custom order', () => {
+  const rows = () =>
+    [...document.querySelectorAll('[role=tree] > [role=treeitem]')].map((li) => li.getAttribute('aria-label'))
+
+  it('moves items up and down from the menu and keyboard, and saves the order', async () => {
+    renderApp('/')
+    await screen.findByRole('link', { name: /^Inbox/ })
+    expect(rows()).toEqual(['Work', 'Inbox']) // default: folders first
+    const menu = await openMenu('Inbox')
+    expect(within(menu).queryByRole('menuitem', { name: 'Move down' })).not.toBeInTheDocument()
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Move up' }))
+    await waitFor(() => expect(rows()).toEqual(['Inbox', 'Work']))
+    await waitFor(() =>
+      expect(JSON.parse(fake.drive.files()['_meta.json']!).order).toEqual(['Inbox.md', 'Work']),
+    )
+
+    screen.getByRole('link', { name: /^Inbox/ }).focus()
+    fireEvent.keyDown(screen.getByRole('link', { name: /^Inbox/ }), { key: 'ArrowDown', altKey: true })
+    await waitFor(() => expect(rows()).toEqual(['Work', 'Inbox']))
+    await waitFor(() =>
+      expect(JSON.parse(fake.drive.files()['_meta.json']!).order).toEqual(['Work', 'Inbox.md']),
+    )
+  })
+
+  it('keeps the position when renaming, and keeps icons in the same meta file', async () => {
+    fake.drive.write(
+      'Work/_meta.json',
+      JSON.stringify({ notes: { 'Plan.md': 'star' }, order: ['Sub', 'Plan.md'] }),
+    )
+    renderApp('/')
+    const menu = await openMenu('Plan')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
+    await answerPrompt('Roadmap', 'Rename')
+    await waitFor(() =>
+      expect(JSON.parse(fake.drive.files()['Work/_meta.json']!)).toEqual({
+        notes: { 'Roadmap.md': 'star' },
+        order: ['Sub', 'Roadmap.md'],
+      }),
+    )
   })
 })

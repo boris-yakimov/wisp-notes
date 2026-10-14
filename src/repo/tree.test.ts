@@ -104,3 +104,15 @@ describe('findNote', () => {
     expect(findNote(root, 'Nope.md')).toBeUndefined()
   })
 })
+
+describe('custom order', () => {
+  it('lists ordered items first, then the rest (folders, then notes); stale names are ignored', () => {
+    const root = buildTree(['B.md', 'A.md', 'Z/x.md', 'Y/y.md', 'Plan.md', 'Plan/b.md', 'Plan/a.md'], {
+      '': { order: ['Plan.md', 'gone.md', 'B.md', 'Z'] },
+      Plan: { order: ['b.md'] },
+    })
+    expect(root.items.map((n) => n.name)).toEqual(['Plan', 'B', 'Z', 'Y', 'A'])
+    expect(findNote(root, 'Plan.md')!.children!.items.map((n) => n.name)).toEqual(['b', 'a'])
+    expect(parseMeta('{"order":["a",1,"b"]}')).toEqual({ order: ['a', 'b'] })
+  })
+})

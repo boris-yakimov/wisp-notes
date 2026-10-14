@@ -38,7 +38,8 @@ npm ci
   the rest of your Drive. Use **Import folder** (sidebar header or a folder's menu), or **Import folder contents as sub-notes** on a note, to bring in existing Markdown
   files, such as a Notion export.
 - **Organizing**: drag notes and folders onto a folder in the sidebar to nest them (or use **Move to…** in their
-  menu).
+  menu). To reorder, drag an item to the top or bottom edge of another row (a line shows where it lands), or use
+  **Move up** / **Move down** in its menu or `Alt+↑` / `Alt+↓`. The order is saved in Drive, so every device sees it.
 - **Sub-notes**, like Notion pages: use **+** on a note row (or **New sub-note** in its menu), or drag a note onto
   another note. Sub-notes of `Plan.md` live in a `Plan/` folder next to it, the same layout as a Notion export, so
   imported Notion pages show up nested. A note with sub-notes lists them as links in a strip above its text.

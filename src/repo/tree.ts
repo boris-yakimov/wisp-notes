@@ -4,6 +4,8 @@ export interface FolderMeta {
   icon?: string
   /** Icons of the notes in this folder, by file name ("Plan.md" → "star"). */
   notes?: Record<string, string>
+  /** Custom sidebar order of this folder's items, by file/folder name. Unlisted items follow, sorted. */
+  order?: string[]
 }
 
 export interface NoteNode {
@@ -22,6 +24,8 @@ export interface FolderNode {
   icon: string | undefined
   folders: FolderNode[]
   notes: NoteNode[]
+  /** Folders and notes in display order (custom `order` from `_meta.json`, then folders, then notes). */
+  items: (FolderNode | NoteNode)[]
 }
 
 /** Parse `_meta.json`; invalid JSON or shape yields an empty meta. */
@@ -30,7 +34,7 @@ export function parseMeta(text: string | undefined): FolderMeta {
   try {
     const v = JSON.parse(text) as unknown
     if (!v || typeof v !== 'object') return {}
-    const raw = v as { icon?: unknown; notes?: unknown }
+    const raw = v as { icon?: unknown; notes?: unknown; order?: unknown }
     const meta: FolderMeta = {}
     if (typeof raw.icon === 'string') meta.icon = raw.icon
     if (raw.notes && typeof raw.notes === 'object') {
@@ -38,6 +42,10 @@ export function parseMeta(text: string | undefined): FolderMeta {
         Object.entries(raw.notes).filter((kv): kv is [string, string] => typeof kv[1] === 'string'),
       )
       if (Object.keys(notes).length) meta.notes = notes
+    }
+    if (Array.isArray(raw.order)) {
+      const order = raw.order.filter((x): x is string => typeof x === 'string')
+      if (order.length) meta.order = order
     }
     return meta
   } catch {
@@ -82,6 +90,7 @@ export function buildTree(
     icon: metas['']?.icon,
     folders: [],
     notes: [],
+    items: [],
   }
   const folders = new Map<string, FolderNode>([['', root]])
 
@@ -96,6 +105,7 @@ export function buildTree(
       icon: metas[path]?.icon,
       folders: [],
       notes: [],
+      items: [],
     }
     parent.folders.push(node)
     folders.set(path, node)
@@ -135,7 +145,42 @@ export function buildTree(
     for (const n of f.notes) if (n.children) attach(n.children)
   }
   attach(root)
+  // Display order: names listed in the folder's `order` first, then the rest (folders, then notes).
+  const arrange = (f: FolderNode) => {
+    const rank = new Map((metas[f.path]?.order ?? []).map((name, i) => [name, i] as const))
+    const all = [...f.folders, ...f.notes]
+    const listed = all
+      .filter((n) => rank.has(itemName(n)))
+      .sort((a, b) => rank.get(itemName(a))! - rank.get(itemName(b))!)
+    f.items = [...listed, ...all.filter((n) => !rank.has(itemName(n)))]
+    f.folders.forEach(arrange)
+    for (const n of f.notes) if (n.children) arrange(n.children)
+  }
+  arrange(root)
   return root
+}
+
+/** Name of a tree item as stored in `_meta.json` (`order`, note icons): its real Drive name. */
+export function itemName(node: FolderNode | NoteNode): string {
+  return fileName(node.path)
+}
+
+/**
+ * The container holding items at `path` ('' = top level, a folder, or a note's sub-note folder
+ * `childFolderOf(note)`). Undefined if it doesn't exist (e.g. a note without sub-notes yet).
+ */
+export function findContainer(root: FolderNode, path: string): FolderNode | undefined {
+  if (path === '') return root
+  for (const item of root.items) {
+    const inner = item.kind === 'folder' ? item : item.children
+    if (!inner) continue
+    if (inner.path === path) return inner
+    if (path.startsWith(inner.path + '/')) {
+      const found = findContainer(inner, path)
+      if (found) return found
+    }
+  }
+  return undefined
 }
 
 /** The note at `path` in the tree, or undefined. */

@@ -14,7 +14,7 @@ import {
   noteTitle,
   validateName,
 } from './paths.ts'
-import { serializeMeta, withNoteIcon, type FolderMeta } from './tree.ts'
+import { buildTree, findContainer, itemName, serializeMeta, withNoteIcon, type FolderMeta } from './tree.ts'
 
 /**
  * Pure builders for note/folder operations. They validate input and return Drive ops;
@@ -82,17 +82,47 @@ const writeMeta = (folder: string, meta: FolderMeta): DriveOp =>
   // No conflict check (base undefined): icons are tiny settings, last write wins.
   ({ kind: 'write', path: metaPath(folder), content: serializeMeta(meta) })
 
-/** Meta writes that carry a note's icon from `from` to `to` (or drop it if `to` is null). */
-function moveNoteIcon(metas: Metas, from: string, to: string | null): DriveOp[] {
-  const icon = metas[dirname(from)]?.notes?.[fileName(from)]
-  if (!icon) return []
-  const src = withNoteIcon(metas[dirname(from)] ?? {}, fileName(from), undefined)
-  if (to === null) return [writeMeta(dirname(from), src)]
-  if (dirname(to) === dirname(from)) return [writeMeta(dirname(to), withNoteIcon(src, fileName(to), icon))]
-  return [
-    writeMeta(dirname(from), src),
-    writeMeta(dirname(to), withNoteIcon(metas[dirname(to)] ?? {}, fileName(to), icon)),
-  ]
+/** Pending `_meta.json` changes, so each folder's meta is written once, with all changes combined. */
+class MetaEdits {
+  private metas: Metas
+  private next = new Map<string, FolderMeta>()
+  constructor(metas: Metas) {
+    this.metas = metas
+  }
+  get(folder: string): FolderMeta {
+    return this.next.get(folder) ?? this.metas[folder] ?? {}
+  }
+  set(folder: string, meta: FolderMeta): void {
+    this.next.set(folder, meta)
+  }
+  ops(): DriveOp[] {
+    return [...this.next].map(([f, m]) => writeMeta(f, m))
+  }
+}
+
+/** Carry a note's icon from `from` to `to` (or drop it if `to` is null). */
+function moveNoteIcon(edits: MetaEdits, from: string, to: string | null): void {
+  const icon = edits.get(dirname(from)).notes?.[fileName(from)]
+  if (!icon) return
+  edits.set(dirname(from), withNoteIcon(edits.get(dirname(from)), fileName(from), undefined))
+  if (to !== null) edits.set(dirname(to), withNoteIcon(edits.get(dirname(to)), fileName(to), icon))
+}
+
+/**
+ * Keep the custom order in sync: a rename keeps the item's position; a move or delete removes it from
+ * its old folder's order (in the new folder it goes to the end until reordered).
+ */
+function moveInOrder(edits: MetaEdits, from: string, to: string | null): void {
+  const meta = edits.get(dirname(from))
+  const order = meta.order
+  if (!order?.includes(fileName(from))) return
+  const same = to !== null && dirname(to) === dirname(from)
+  const next = same
+    ? order.map((n) => (n === fileName(from) ? fileName(to) : n))
+    : order.filter((n) => n !== fileName(from))
+  const updated: FolderMeta = { ...meta, order: next }
+  if (!next.length) delete updated.order
+  edits.set(dirname(from), updated)
 }
 
 /** Create a note in `folder`. For a sub-note, `folder` is the parent note's `childFolderOf`. */
@@ -126,7 +156,10 @@ export function renameNoteOp(path: string, newName: string, entries: Entry[], me
   const child = childFolder(entries, path)
   const ops: DriveOp[] = [{ kind: 'rename', path, to }]
   if (child) ops.push({ kind: 'rename', path: child, to: childFolderOf(to) })
-  ops.push(...moveNoteIcon(metas, path, to))
+  const edits = new MetaEdits(metas)
+  moveNoteIcon(edits, path, to)
+  moveInOrder(edits, path, to)
+  ops.push(...edits.ops())
   return {
     ops,
     target: to,
@@ -146,17 +179,20 @@ export function renameNoteOp(path: string, newName: string, entries: Entry[], me
 export function deleteNoteOp(path: string, entries: Entry[], metas: Metas = {}): Op {
   if (!find(entries, path)) throw new OpError('The note no longer exists.')
   const child = childFolder(entries, path)
+  const edits = new MetaEdits(metas)
+  moveNoteIcon(edits, path, null) // so a new note with the same name doesn't inherit it
+  moveInOrder(edits, path, null)
   return {
     ops: [
       { kind: 'trash', path },
       ...(child ? [{ kind: 'trash' as const, path: child }] : []),
-      ...moveNoteIcon(metas, path, null), // so a new note with the same name doesn't inherit it
+      ...edits.ops(),
     ],
   }
 }
 
 /** One Drive rename; everything inside moves with the folder. */
-export function renameFolderOp(folder: string, newName: string, entries: Entry[]): Op {
+export function renameFolderOp(folder: string, newName: string, entries: Entry[], metas: Metas = {}): Op {
   if (!isFolder(entries, folder)) throw new OpError('The folder no longer exists.')
   const to = joinPath(dirname(folder), checkName(newName))
   if (to === folder) return { ops: [], target: folder }
@@ -167,7 +203,9 @@ export function renameFolderOp(folder: string, newName: string, entries: Entry[]
   }
   const moved = movedPaths(entries, [[folder, to]])
   delete moved[folder]
-  return { ops: [{ kind: 'rename', path: folder, to }], target: to, moved }
+  const edits = new MetaEdits(metas)
+  moveInOrder(edits, folder, to)
+  return { ops: [{ kind: 'rename', path: folder, to }, ...edits.ops()], target: to, moved }
 }
 
 /**
@@ -175,6 +213,12 @@ export function renameFolderOp(folder: string, newName: string, entries: Entry[]
  * keeping its name. A note's sub-notes move with it. One Drive request per moved item.
  */
 export function moveOp(path: string, toFolder: string, entries: Entry[], metas: Metas = {}): Op {
+  const edits = new MetaEdits(metas)
+  const op = moveWith(edits, path, toFolder, entries)
+  return { ...op, ops: [...op.ops, ...edits.ops()] }
+}
+
+function moveWith(edits: MetaEdits, path: string, toFolder: string, entries: Entry[]): Op {
   const src = find(entries, path)
   if (!src) throw new OpError(`"${fileName(path)}" no longer exists.`)
   if (!isContainer(entries, toFolder)) throw new OpError('The target no longer exists.')
@@ -190,14 +234,70 @@ export function moveOp(path: string, toFolder: string, entries: Entry[], metas: 
   const child = src.folder ? undefined : childFolder(entries, path)
   const pairs: [string, string][] = [[path, to]]
   if (child) pairs.push([child, childFolderOf(to)])
+  if (!src.folder) moveNoteIcon(edits, path, to)
+  moveInOrder(edits, path, to)
   return {
-    ops: [
-      ...pairs.map(([p, t]) => ({ kind: 'rename' as const, path: p, to: t })),
-      ...(src.folder ? [] : moveNoteIcon(metas, path, to)),
-    ],
+    ops: pairs.map(([p, t]) => ({ kind: 'rename' as const, path: p, to: t })),
     target: to,
     moved: movedPaths(entries, pairs),
   }
+}
+
+/** Sidebar items of a container, in display order. */
+function containerItems(container: string, entries: Entry[], metas: Metas) {
+  const root = buildTree(
+    entries.filter((e) => !e.folder).map((e) => e.path),
+    metas,
+    entries.filter((e) => e.folder).map((e) => e.path),
+  )
+  return findContainer(root, container)?.items ?? []
+}
+
+/**
+ * Put a note or folder right before or after `target` in the sidebar, moving it into `target`'s
+ * container first if needed. The container's full order is saved in its `_meta.json`.
+ */
+export function placeOp(
+  path: string,
+  target: string,
+  where: 'before' | 'after',
+  entries: Entry[],
+  metas: Metas = {},
+): Op {
+  if (path === target) return { ops: [] }
+  if (!find(entries, target)) throw new OpError(`"${fileName(target)}" no longer exists.`)
+  const container = dirname(target)
+  const edits = new MetaEdits(metas)
+  const move =
+    dirname(path) === container ? { ops: [], target: path } : moveWith(edits, path, container, entries)
+  const moved = move.target ?? path
+  const names = containerItems(container, entries, metas)
+    .map(itemName)
+    .filter((n) => n !== fileName(path))
+  const at = names.indexOf(fileName(target))
+  if (at < 0) throw new OpError(`"${fileName(target)}" no longer exists.`)
+  names.splice(where === 'before' ? at : at + 1, 0, fileName(moved))
+  const current = containerItems(container, entries, metas).map(itemName)
+  if (!move.ops.length && names.join('\n') === current.join('\n') && edits.get(container).order)
+    return { ops: [] }
+  edits.set(container, { ...edits.get(container), order: names })
+  return { ...move, ops: [...move.ops, ...edits.ops()] }
+}
+
+/** Move a note or folder one place up (-1) or down (+1) among its siblings. */
+export function shiftOp(path: string, delta: -1 | 1, entries: Entry[], metas: Metas = {}): Op {
+  const items = containerItems(dirname(path), entries, metas)
+  const i = items.findIndex((n) => n.path === path)
+  const neighbor = items[i + delta]
+  if (i < 0 || !neighbor) return { ops: [] }
+  return placeOp(path, neighbor.path, delta < 0 ? 'before' : 'after', entries, metas)
+}
+
+/** Can `path` move up (-1) or down (+1)? */
+export function canShift(path: string, delta: -1 | 1, entries: Entry[], metas: Metas = {}): boolean {
+  const items = containerItems(dirname(path), entries, metas)
+  const i = items.findIndex((n) => n.path === path)
+  return i >= 0 && !!items[i + delta]
 }
 
 /**
@@ -218,9 +318,11 @@ export function moveTargets(path: string, entries: Entry[]): string[] {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
 }
 
-export function deleteFolderOp(folder: string, entries: Entry[]): Op {
+export function deleteFolderOp(folder: string, entries: Entry[], metas: Metas = {}): Op {
   if (!isFolder(entries, folder)) throw new OpError('The folder no longer exists.')
-  return { ops: [{ kind: 'trash', path: folder }] }
+  const edits = new MetaEdits(metas)
+  moveInOrder(edits, folder, null)
+  return { ops: [{ kind: 'trash', path: folder }, ...edits.ops()] }
 }
 
 export function setFolderIconOp(folder: string, icon: string | undefined, current: FolderMeta): Op {
