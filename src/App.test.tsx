@@ -175,3 +175,26 @@ describe('App: sub-pages', () => {
     expect(screen.queryByRole('navigation', { name: 'Sub-pages' })).not.toBeInTheDocument()
   })
 })
+
+describe('App: paste an image', () => {
+  it('inserts the image into the note and uploads it next to the note', async () => {
+    const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:pasted')
+    renderApp('/n/Work/Plan.md')
+    await waitFor(() => expect(editorText()).toBe('The plan'))
+    const view = getEditorView()
+    act(() => view.dispatch({ selection: { anchor: view.state.doc.length } }))
+    const image = new File([new Uint8Array([137, 80, 78, 71])], 'image.png', { type: 'image/png' })
+    const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent
+    Object.defineProperty(paste, 'clipboardData', { value: { files: [image], getData: () => '' } })
+    act(() => void view.contentDOM.dispatchEvent(paste))
+    expect(paste.defaultPrevented).toBe(true)
+    expect(editorText()).toMatch(/^The plan\n!\[\]\(Plan\/Pasted%20image%20\d{4}-\d\d-\d\d%20\d{6}\.png\)$/)
+    await waitFor(() =>
+      expect(Object.keys(fake.drive.files()).some((p) => /^Work\/Plan\/Pasted image .*\.png$/.test(p))).toBe(
+        true,
+      ),
+    )
+    await waitFor(() => expect(document.querySelector('.cm-image img')).toHaveAttribute('src', 'blob:pasted'))
+    created.mockRestore()
+  })
+})

@@ -62,7 +62,8 @@ the app only sees files it created or imported.
 - Production build injects a strict CSP (`vite.config.ts`): own scripts plus `accounts.google.com/gsi/client`;
   `connect-src` limited to `www.googleapis.com` and GIS. Markdown is never rendered as HTML. Images in notes (`editor/images.ts`) are repo files only:
   downloaded via the Drive API, cached by MD5 in IndexedDB (`files` store) and shown as `blob:` URLs (`img-src blob:`);
-  remote image URLs are not loaded.
+  remote image URLs are not loaded. Pasted images (`RepoSession.pasteImage`, name from `pastedImage` in `ops.ts`) are
+  uploaded into the note's sub-note folder and shown from memory immediately.
 
 ## Testing
 

@@ -8,6 +8,8 @@ import {
   importOp,
   moveOp,
   moveTargets,
+  pastedImage,
+  pastedImageExt,
   placeOp,
   renameFolderOp,
   renameNoteOp,
@@ -323,5 +325,29 @@ describe('custom order', () => {
   it('keeps the position when a folder is renamed', () => {
     const op = renameFolderOp('Docs', 'Papers', es, { '': { order: ['Docs', 'A.md'] } })
     expect(metaOf(op.ops)).toEqual({ order: ['Papers', 'A.md'] })
+  })
+})
+
+describe('pasted images', () => {
+  const now = new Date(2026, 9, 14, 13, 49, 5)
+  it("stores the image in the note's sub-note folder and links it relatively", () => {
+    expect(pastedImage('Work/Plan.md', 'png', now, entries)).toEqual({
+      path: 'Work/Plan/Pasted image 2026-10-14 134905.png',
+      markdown: '![](Plan/Pasted%20image%202026-10-14%20134905.png)',
+    })
+  })
+  it('avoids existing names and keeps "/" in note names encoded', () => {
+    const es = [...entries, f('Work/Plan/Pasted image 2026-10-14 134905.png')]
+    expect(pastedImage('Work/Plan.md', 'png', now, es).path).toBe(
+      'Work/Plan/Pasted image 2026-10-14 134905 (2).png',
+    )
+    expect(pastedImage('CI\uE000CD.md', 'jpg', now, entries).markdown).toBe(
+      '![](CI%2FCD/Pasted%20image%202026-10-14%20134905.jpg)',
+    )
+  })
+  it('accepts common image types only', () => {
+    expect(pastedImageExt('image/png')).toBe('png')
+    expect(pastedImageExt('image/jpeg')).toBe('jpg')
+    expect(pastedImageExt('image/svg+xml')).toBeNull()
   })
 })

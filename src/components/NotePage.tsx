@@ -107,6 +107,21 @@ function NoteView({ path }: { path: string }) {
     },
     [path, navigate, session],
   )
+  const onPasteImage = useCallback(
+    (image: File) => {
+      try {
+        const { markdown, done } = session.pasteImage(path, image)
+        done.catch((e: Error) =>
+          notify(`The pasted image could not be saved to Google Drive: ${e.message}`, 'error'),
+        )
+        return markdown
+      } catch (e) {
+        notify((e as Error).message, 'error')
+        return null
+      }
+    },
+    [path, session],
+  )
   const resolveImage = useCallback(
     (src: string) => {
       const p = resolveRepoPath(src, path)
@@ -137,6 +152,7 @@ function NoteView({ path }: { path: string }) {
             onSave={onSave}
             onOpenLink={onOpenLink}
             resolveImage={resolveImage}
+            onPasteImage={onPasteImage}
             onVimMode={setVimMode}
             vimEnabled={settings.vim}
             livePreviewEnabled={settings.livePreview}

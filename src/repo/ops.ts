@@ -3,6 +3,7 @@ import type { DriveOp } from './apply.ts'
 import {
   basename,
   childFolderOf,
+  decodeName,
   encodeName,
   fileName,
   dirname,
@@ -426,4 +427,39 @@ export function setIconsOp(suggestions: IconSuggestion[], metas: Metas): Op {
     else next.set(dirname(s.path), withNoteIcon(get(dirname(s.path)), fileName(s.path), s.icon))
   }
   return { ops: [...next].map(([f, meta]) => writeMeta(f, meta)) }
+}
+
+const IMAGE_TYPES: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+}
+
+/** Largest pasted image accepted (Drive multipart uploads are meant for small files). */
+export const MAX_PASTED_IMAGE = 20 * 1024 * 1024
+
+/** File extension for a pasted image's MIME type, or null if it isn't a supported image. */
+export function pastedImageExt(mimeType: string): string | null {
+  return IMAGE_TYPES[mimeType.toLowerCase()] ?? null
+}
+
+/**
+ * Where a pasted image is stored: next to its note's sub-notes, `Plan.md` → `Plan/Pasted image
+ * 2026-10-14 134912.png` (the Notion export layout), plus the Markdown that shows it in the note.
+ */
+export function pastedImage(
+  notePath: string,
+  ext: string,
+  now: Date,
+  entries: Entry[],
+): { path: string; markdown: string } {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const folder = childFolderOf(notePath)
+  let name = `Pasted image ${stamp}.${ext}`
+  for (let n = 2; taken(entries, joinPath(folder, name)); n++) name = `Pasted image ${stamp} (${n}).${ext}`
+  const path = joinPath(folder, name)
+  const rel = [basename(folder), name].map((s) => encodeURIComponent(decodeName(s))).join('/')
+  return { path, markdown: `![](${rel})` }
 }

@@ -313,3 +313,41 @@ test('images in a note are shown inline, loaded from Drive', async ({ page, driv
   // The image file itself is not listed as a note in the sidebar
   await expect(page.getByRole('navigation', { name: 'Notes' }).getByText('Untitled 1')).toHaveCount(0)
 })
+
+test('paste an image from the clipboard: shown in the note and saved to Drive', async ({
+  page,
+  drive,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'same code path as desktop')
+  await signedIn(page, false)
+  await page.goto('/n/Work/Plan.md')
+  const editor = page.locator('.cm-content')
+  await expect(editor).toContainText('write tests')
+  await editor.click()
+  await page.keyboard.press('ControlOrMeta+End')
+  // Clipboard with a 2×2 PNG, as when pasting a screenshot
+  await editor.evaluate((el) => {
+    const b64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNAMDAE2kBf1ZNkx6AAAAAElFTkSuQmCC'
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+    const data = new DataTransfer()
+    data.items.add(new File([bytes], 'image.png', { type: 'image/png' }))
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  const img = page.locator('.cm-image img')
+  await expect(img).toBeVisible()
+  await expect.poll(() => img.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(2)
+  await expect
+    .poll(() => Object.keys(drive.files()).find((p) => p.startsWith('Work/Plan/Pasted image ')))
+    .toMatch(/\.png$/)
+  // The note text links to it once saved
+  await page.keyboard.press('ControlOrMeta+s')
+  await expect.poll(() => drive.files()['Work/Plan.md']).toMatch(/!\[\]\(Plan\/Pasted%20image%20[^)]+\.png\)/)
+  // After a reload, the image comes back from Drive
+  await page.reload()
+  await expect(page.locator('.cm-image img')).toBeVisible()
+  await expect
+    .poll(() => page.locator('.cm-image img').evaluate((el) => (el as HTMLImageElement).naturalWidth))
+    .toBe(2)
+})

@@ -29,6 +29,8 @@ export interface EditorProps {
   onVimMode?: (mode: string | null) => void
   /** Object URL for an image written in the note (`![](src)`), or null if it can't be shown. */
   resolveImage?: ImageResolver
+  /** An image was pasted: store it and return the Markdown to insert (null = not handled). */
+  onPasteImage?: (image: File) => string | null
   /** Ctrl/Cmd+click on a link; receives the link target as written. */
   onOpenLink?: (href: string) => void
   vimEnabled: boolean
@@ -97,6 +99,30 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: true }),
           markdownHighlight,
           linkClick((href) => propsRef.current.onOpenLink?.(href)),
+          EditorView.domEventHandlers({
+            paste(e, view) {
+              const onPaste = propsRef.current.onPasteImage
+              if (!onPaste || view.state.readOnly) return false
+              const images = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+              if (!images.length) return false
+              e.preventDefault()
+              const md = images.map((f) => onPaste(f)).filter((m): m is string => !!m)
+              if (!md.length) return true
+              // Each image on its own line, like a pasted screenshot in Notion.
+              const { from, to } = view.state.selection.main
+              const line = view.state.doc.lineAt(from)
+              const before = from > line.from ? '\n' : ''
+              const after = to < view.state.doc.lineAt(to).to ? '\n' : ''
+              const insert = before + md.join('\n') + after
+              view.dispatch({
+                changes: { from, to, insert },
+                selection: { anchor: from + insert.length },
+                userEvent: 'input.paste',
+                scrollIntoView: true,
+              })
+              return true
+            },
+          }),
           editorTheme,
           c.dark.of(darkExt(!!p.dark)),
           search({ top: true }),

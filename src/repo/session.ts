@@ -6,7 +6,7 @@ import { md5Hex } from '../drive/md5.ts'
 import { RemoteTree, type Entry } from '../drive/remoteTree.ts'
 import { applyOpsToEntries, executeOps, type DriveOp, type ExecResult } from './apply.ts'
 import { AutoSaver, type SaveStatus } from './autosave.ts'
-import { importOp, type ImportFile } from './ops.ts'
+import { importOp, MAX_PASTED_IMAGE, pastedImage, pastedImageExt, type ImportFile } from './ops.ts'
 import { dirname, isMetaPath, isNotePath } from './paths.ts'
 import { parseMeta, type FolderMeta } from './tree.ts'
 
@@ -91,6 +91,8 @@ export class RepoSession {
   private now: () => Date
   /** Object URLs of repo files (images), by content hash. */
   private fileUrls = new Map<string, Promise<string>>()
+  /** Files added on this device (pasted images): shown at once, before and after the upload. */
+  private localFiles = new Map<string, Blob>()
 
   readonly client: DriveClient
   readonly cache: Cache
@@ -267,11 +269,12 @@ export class RepoSession {
   fileUrl(path: string): Promise<string> {
     const e = this.shown.get(path)
     if (!e || e.folder) return Promise.reject(new DriveError('not-found', `"${path}" does not exist.`))
-    const key = e.md5 ?? e.id
+    const local = this.localFiles.get(path)
+    const key = local ? `local:${path}` : (e.md5 ?? e.id)
     let url = this.fileUrls.get(key)
     if (!url) {
       url = (async () => {
-        let blob = e.md5 ? await this.cache.getFile(e.md5) : undefined
+        let blob = local ?? (e.md5 ? await this.cache.getFile(e.md5) : undefined)
         if (!blob) {
           if (e.id.startsWith('pending:'))
             throw new DriveError('not-found', 'The file is still being uploaded.')
@@ -284,6 +287,25 @@ export class RepoSession {
       url.catch(() => this.fileUrls.delete(key))
     }
     return url
+  }
+
+  /**
+   * Store a pasted image next to the note (in its sub-note folder) and return the Markdown that shows
+   * it. The image is visible at once; the upload runs in the background (`done`).
+   */
+  pasteImage(notePath: string, image: Blob): { markdown: string; done: Promise<void> } {
+    const ext = pastedImageExt(image.type)
+    if (!ext) throw new DriveError('unknown', 'Only PNG, JPEG, GIF and WebP images can be pasted.')
+    if (image.size > MAX_PASTED_IMAGE) throw new DriveError('unknown', 'The image is too large (max 20 MB).')
+    const entries = useRepo.getState().snapshot?.entries ?? []
+    const { path, markdown } = pastedImage(notePath, ext, this.now(), entries)
+    this.localFiles.set(path, image)
+    const done = (async () => {
+      await this.applyOptimistic([{ kind: 'write', path, content: image, base: null }])
+      const md5 = this.shown.get(path)?.md5
+      if (md5) await this.cache.putFile(md5, image) // available offline on this device too
+    })()
+    return { markdown, done }
   }
 
   /** Cached content only (no network). */
