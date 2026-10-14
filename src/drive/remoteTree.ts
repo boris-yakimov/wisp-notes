@@ -1,3 +1,4 @@
+import { encodeName, NAME_SLASH } from '../repo/paths.ts'
 import type { DriveChange, DriveItem } from './client.ts'
 
 /** Path-based view of one item, as used by the UI. Paths are relative to the Wisp Notes root folder. */
@@ -19,7 +20,8 @@ export interface RemoteState {
 
 /**
  * Remote Drive state keyed by file ID, with paths derived from the parent chain.
- * Items not reachable from the root folder are ignored. Names containing "/" are skipped;
+ * Items not reachable from the root folder are ignored. A "/" in a name is stored as `NAME_SLASH`
+ * in its path segment (see paths.ts);
  * duplicate names in one folder get a " (2)" suffix in the derived path.
  */
 export class RemoteTree {
@@ -82,12 +84,12 @@ export class RemoteTree {
       const list = (children.get(folderId) ?? []).slice().sort((a, b) => a.id.localeCompare(b.id))
       const used = new Set<string>()
       for (const i of list) {
-        if (i.name.includes('/') || !i.name) continue
-        let name = i.name
+        if (!i.name || i.name.includes(NAME_SLASH)) continue
+        const base = encodeName(i.name)
+        let name = base
         for (let n = 2; used.has(name.toLowerCase()); n++) {
-          const dot = i.name.lastIndexOf('.')
-          name =
-            !i.folder && dot > 0 ? `${i.name.slice(0, dot)} (${n})${i.name.slice(dot)}` : `${i.name} (${n})`
+          const dot = base.lastIndexOf('.')
+          name = !i.folder && dot > 0 ? `${base.slice(0, dot)} (${n})${base.slice(dot)}` : `${base} (${n})`
         }
         used.add(name.toLowerCase())
         const path = prefix ? `${prefix}/${name}` : name

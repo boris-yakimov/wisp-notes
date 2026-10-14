@@ -1,6 +1,23 @@
 /** Pure helpers for repo paths. Paths are POSIX-style, relative to repo root, no leading slash. */
 
 export const META_FILE = '_meta.json'
+
+/**
+ * Stands for "/" inside a name. Drive allows "/" in file names, but paths use it as the separator, so a
+ * path segment is the Drive name with "/" replaced by this private-use character. Convert at the edges:
+ * `encodeName` for names from Drive or the user, `decodeName`/`fileName`/`noteTitle` for Drive and display.
+ */
+export const NAME_SLASH = '\uE000'
+
+/** Drive or typed name → path segment. */
+export function encodeName(name: string): string {
+  return name.replaceAll('/', NAME_SLASH)
+}
+
+/** Path segment → real name (as in Drive and shown to the user). */
+export function decodeName(segment: string): string {
+  return segment.replaceAll(NAME_SLASH, '/')
+}
 export const NOTE_EXT = '.md'
 
 export function isNotePath(path: string): boolean {
@@ -25,9 +42,19 @@ export function joinPath(dir: string, name: string): string {
   return dir ? `${dir}/${name}` : name
 }
 
-/** "Work/Plan.md" → "Plan" */
+/** Real file name of the last segment: "Work/CI\uE000CD.md" → "CI/CD.md". Use for Drive and `_meta.json`. */
+export function fileName(path: string): string {
+  return decodeName(basename(path))
+}
+
+/** Path for display: "Work/CI\uE000CD" → "Work / CI/CD". */
+export function displayPath(path: string, sep = ' / '): string {
+  return path.split('/').map(decodeName).join(sep)
+}
+
+/** "Work/Plan.md" → "Plan" (with real slashes: "CI/CD.md" → "CI/CD") */
 export function noteTitle(path: string): string {
-  const b = basename(path)
+  const b = fileName(path)
   return isNotePath(b) ? b.slice(0, -NOTE_EXT.length) : b
 }
 
@@ -57,7 +84,8 @@ export function isHidden(path: string): boolean {
 export function validateName(name: string): string | null {
   const n = name.trim()
   if (!n) return 'Name cannot be empty.'
-  if (n.includes('/') || n.includes('\\')) return 'Name cannot contain slashes.'
+  if (n.includes('\\')) return 'Name cannot contain backslashes.'
+  if (n.includes(NAME_SLASH)) return 'Name contains an unsupported character.'
   if (n.startsWith('.')) return 'Name cannot start with a dot.'
   if (n === META_FILE) return 'This name is reserved.'
   if (n.length > 200) return 'Name is too long.'
@@ -66,7 +94,29 @@ export function validateName(name: string): string | null {
 
 /** Encode a repo path for use in the URL (/n/<path>), keeping slashes readable. */
 export function notePathToUrl(path: string): string {
-  return '/n/' + path.split('/').map(encodeURIComponent).join('/')
+  return (
+    '/n/' +
+    path
+      .split('/')
+      .map((s) => encodeURIComponent(decodeName(s)))
+      .join('/')
+  )
+}
+
+/** Inverse of `notePathToUrl`, from the raw (still encoded) URL pathname; null if not a note URL. */
+export function urlToNotePath(pathname: string): string | null {
+  if (!pathname.startsWith('/n/')) return null
+  return pathname
+    .slice(3)
+    .split('/')
+    .map((s) => {
+      try {
+        return encodeName(decodeURIComponent(s))
+      } catch {
+        return s
+      }
+    })
+    .join('/')
 }
 
 /** `Work/Plan.md` → `Work/Plan (conflict 2026-10-11).md`, unique against `existing`. */

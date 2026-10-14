@@ -1,7 +1,7 @@
 import { FileText, Search } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router'
-import { dirname, isNotePath, noteTitle, notePathToUrl } from '../repo/paths.ts'
+import { dirname, displayPath, isNotePath, noteTitle, notePathToUrl } from '../repo/paths.ts'
 import { useRepo } from '../repo/session.ts'
 import { highlightParts, type SearchHit } from '../search/index.ts'
 import type { SearchService } from '../search/service.ts'
@@ -141,7 +141,7 @@ function Palette({ search }: { search: SearchService }) {
                 </span>
                 {dirname(hit.path) && (
                   <span className="ml-auto shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-500">
-                    {dirname(hit.path)}
+                    {displayPath(dirname(hit.path))}
                   </span>
                 )}
               </div>

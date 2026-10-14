@@ -38,4 +38,9 @@ describe('resolveLink', () => {
     expect(resolveLink('../../x.md', from)).toBeNull()
     expect(resolveLink('', from)).toBeNull()
   })
+
+  it('treats an encoded slash as part of a note name', () => {
+    expect(resolveLink('CI%2FCD.md', from)).toEqual({ kind: 'note', path: 'Work/CI\uE000CD.md' })
+    expect(resolveLink('../Ops/CI%2FCD.md', from)).toEqual({ kind: 'note', path: 'Ops/CI\uE000CD.md' })
+  })
 })

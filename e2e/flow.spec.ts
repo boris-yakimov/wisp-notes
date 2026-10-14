@@ -245,3 +245,19 @@ test('Ctrl+click opens links: notes in the app, websites in a new tab', async ({
   await expect(page).toHaveURL(/\/n\/Inbox\.md$/)
   await expect(editor).toContainText('Things to sort.')
 })
+
+test('a note with "/" in its name opens from a deep link and survives a reload', async ({
+  page,
+  drive,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'same code path as desktop')
+  drive.write('Ops.md', 'placeholder')
+  drive.renameRemote('Ops.md', 'CI/CD.md')
+  await signedIn(page)
+  await page.goto('/n/CI%2FCD.md')
+  await expect(page.locator('.cm-content')).toContainText('placeholder')
+  await page.reload()
+  await expect(page.locator('.cm-content')).toContainText('placeholder')
+  await expect(page).toHaveTitle('CI/CD · Wisp Notes')
+})

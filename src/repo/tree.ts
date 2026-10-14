@@ -1,4 +1,4 @@
-import { basename, childFolderOf, dirname, isHidden, isMetaPath, isNotePath, noteTitle } from './paths.ts'
+import { childFolderOf, dirname, fileName, isHidden, isMetaPath, isNotePath, noteTitle } from './paths.ts'
 
 export interface FolderMeta {
   icon?: string
@@ -92,7 +92,7 @@ export function buildTree(
     const node: FolderNode = {
       kind: 'folder',
       path,
-      name: basename(path),
+      name: fileName(path),
       icon: metas[path]?.icon,
       folders: [],
       notes: [],
@@ -112,7 +112,7 @@ export function buildTree(
         kind: 'note',
         path,
         name: noteTitle(path),
-        icon: metas[dirname(path)]?.notes?.[basename(path)],
+        icon: metas[dirname(path)]?.notes?.[fileName(path)],
       })
     } else if (isMetaPath(path)) {
       ensureFolder(dirname(path))

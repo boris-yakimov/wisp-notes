@@ -1,12 +1,12 @@
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import type { EditorHandle } from '../editor/Editor.tsx'
 
 // CodeMirror is the largest dependency: load it on demand, so the tree renders instantly.
 const Editor = lazy(() => import('../editor/Editor.tsx').then((m) => ({ default: m.Editor })))
 import { resolveLink } from '../repo/links.ts'
-import { notePathToUrl, noteTitle } from '../repo/paths.ts'
+import { notePathToUrl, noteTitle, urlToNotePath } from '../repo/paths.ts'
 import { useSession } from '../repo/SessionContext.ts'
 import { useRepo } from '../repo/session.ts'
 import { useResolvedTheme } from '../settings/theme.ts'
@@ -18,7 +18,8 @@ type Load = { state: 'loading' } | { state: 'error'; message: string } | { state
 
 /** Route /n/<path>: loads a note and edits it. */
 export function NotePage() {
-  const path = useParams()['*'] ?? ''
+  // From the raw URL: the router's splat param would turn an encoded "/" in a name into a separator.
+  const path = urlToNotePath(useLocation().pathname) ?? ''
   return <NoteView key={path} path={path} />
 }
 

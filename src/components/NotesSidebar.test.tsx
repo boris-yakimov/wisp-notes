@@ -547,3 +547,44 @@ describe('sub-notes', () => {
     expect(fake.drive.files()['Inbox/Plan.md']).toBe('plan')
   })
 })
+
+describe('slashes in names', () => {
+  it('creates, opens, edits and renames a note with "/" in its name', async () => {
+    renderApp('/')
+    await userEvent.click(await screen.findByRole('button', { name: 'New note' }))
+    await answerPrompt('CI/CD', 'Create')
+    const link = await screen.findByRole('link', { name: /^CI\/CD/ })
+    expect(link).toHaveAttribute('href', '/n/CI%2FCD.md')
+    await waitFor(() =>
+      expect(fake.drive.byName('CI/CD.md')).toMatchObject({ parent: 'Wisp Notes', content: '' }),
+    )
+    expect(fake.drive.byName('CI')).toBeUndefined() // no folder was created for the part before "/"
+    await waitFor(() => expect(document.title).toBe('CI/CD · Wisp Notes'))
+    await waitFor(() => expect(document.querySelector('.cm-editor')).not.toBeNull()) // lazy-loaded
+
+    act(() => typeInEditor('pipelines'))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+    await waitFor(() => expect(fake.drive.byName('CI/CD.md')?.content).toBe('pipelines'))
+
+    const menu = await openMenu('CI/CD')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }))
+    expect(within(await screen.findByRole('dialog')).getByRole('textbox')).toHaveValue('CI/CD')
+    await answerPrompt('CI/CD & releases', 'Rename')
+    await waitFor(() => expect(fake.drive.byName('CI/CD & releases.md')?.content).toBe('pipelines'))
+    expect(fake.drive.byName('CI/CD.md')).toBeUndefined()
+  })
+
+  it('shows notes renamed with "/" in Google Drive, and their sub-notes', async () => {
+    fake.drive.renameRemote('Work/Plan.md', 'Q3/Q4 plan.md')
+    fake.drive.write('Work/Sub/Deep.md', null)
+    fake.drive.mkdir('Work/Q3')
+    renderApp('/')
+    const link = await screen.findByRole('link', { name: /^Q3\/Q4 plan/ })
+    expect(link).toHaveAttribute('href', '/n/Work/Q3%2FQ4%20plan.md')
+    await userEvent.click(link)
+    await waitFor(() => expect(getEditorView().state.doc.toString()).toBe('plan'))
+    expect(link).toHaveAttribute('aria-current', 'page')
+    // The real folder "Q3" is a separate item, not mistaken for part of the note's name
+    expect(screen.getByRole('button', { name: /^Q3$/ })).toBeInTheDocument()
+  })
+})

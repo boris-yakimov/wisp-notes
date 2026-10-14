@@ -140,7 +140,12 @@ describe('RemoteTree', () => {
         item('e', 'a/b.md', 'r'),
       ],
     })
-    expect(t.entries().map((e) => e.path)).toEqual(['Work', 'Work/Plan.md', 'Work/Plan (2).md'])
+    expect(t.entries().map((e) => e.path)).toEqual([
+      'Work',
+      'Work/Plan.md',
+      'Work/Plan (2).md',
+      'a\uE000b.md',
+    ])
   })
 
   it('removes descendants with their folder', () => {

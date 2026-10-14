@@ -198,6 +198,26 @@ export class FakeDrive {
     this.touch(root)
   }
 
+  /** Simulate a rename in the Drive UI (which allows "/" in names). */
+  renameRemote(path: string, name: string): void {
+    const f = this.findPath(path)
+    if (!f) throw new Error(`no ${path}`)
+    f.name = name
+    this.touch(f)
+  }
+
+  /** A live file by its exact Drive name (names may contain "/", which `files()` paths can't express). */
+  byName(name: string): { name: string; parent: string; content: string } | undefined {
+    for (const f of this.store.values())
+      if (!f.trashed && f.name === name)
+        return {
+          name: f.name,
+          parent: this.store.get(f.parents[0] ?? '')?.name ?? '',
+          content: dec.decode(f.content),
+        }
+    return undefined
+  }
+
   /** Number of mutating requests (create/update/trash). */
   writeCount(): number {
     return this.log.filter((l) => l.method !== 'GET').length

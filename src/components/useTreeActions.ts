@@ -1,7 +1,14 @@
 import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { suggestIcon } from '../repo/autoIcons.ts'
-import { childFolderOf, isInside, noteTitle, notePathToUrl } from '../repo/paths.ts'
+import {
+  childFolderOf,
+  displayPath,
+  isInside,
+  noteTitle,
+  notePathToUrl,
+  urlToNotePath,
+} from '../repo/paths.ts'
 import {
   countNotes,
   createFolderOp,
@@ -26,22 +33,12 @@ import type { FolderNode, NoteNode } from '../repo/tree.ts'
 import { chooseDialog, confirmDialog, iconDialog, promptDialog } from '../store/dialog.ts'
 import { useUi } from '../store/ui.ts'
 
-/** Path of the note open in the editor, if any. */
-function currentNote(pathname: string): string | null {
-  if (!pathname.startsWith('/n/')) return null
-  return pathname
-    .slice(3)
-    .split('/')
-    .map((s) => decodeURIComponent(s))
-    .join('/')
-}
-
 /** Note & folder operations with dialogs, optimistic UI and navigation. */
 export function useTreeActions() {
   const session = useSession()
   const navigate = useNavigate()
   const location = useLocation()
-  const open = currentNote(location.pathname)
+  const open = urlToNotePath(location.pathname)
   const setExpanded = useUi((s) => s.setExpanded)
 
   const entries = () => useRepo.getState().snapshot?.entries ?? []
@@ -194,7 +191,7 @@ export function useTreeActions() {
     async (node: FolderNode | NoteNode) => {
       const options = moveTargets(node.path, entries()).map((f) => ({
         value: f,
-        label: f ? f.split('/').join(' / ') : 'Top level',
+        label: f ? displayPath(f) : 'Top level',
       }))
       const to = await chooseDialog({
         title: `Move “${node.name}” to…`,
@@ -242,10 +239,7 @@ export function useTreeActions() {
         message: `Set icons for ${n} item${n === 1 ? '' : 's'} in ${where}. Items that already have an icon are left alone.`,
         items: suggestions.map((s) => ({
           icon: s.icon,
-          label: (scope ? s.path.slice(scope.length + 1) : s.path)
-            .replace(/\.md$/i, '')
-            .split('/')
-            .join(' / '),
+          label: displayPath((scope ? s.path.slice(scope.length + 1) : s.path).replace(/\.md$/i, '')),
           detail: s.icon,
         })),
         confirmLabel: 'Set icons',

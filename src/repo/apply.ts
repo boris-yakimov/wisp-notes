@@ -2,7 +2,7 @@ import type { Content, DriveClient } from '../drive/client.ts'
 import { DriveError } from '../drive/errors.ts'
 import { EMPTY_MD5, md5Hex } from '../drive/md5.ts'
 import type { Entry, RemoteTree } from '../drive/remoteTree.ts'
-import { basename, conflictPath, dirname, isInside } from './paths.ts'
+import { conflictPath, dirname, fileName, isInside } from './paths.ts'
 
 /**
  * Storage operations on paths. Executed against Drive by `executeOps`, and applied to the
@@ -79,7 +79,7 @@ export async function executeOps(
     if (!job) {
       job = (async () => {
         const parent = await ensureFolder(dirname(path))
-        const item = await client.createFolder(basename(path), parent)
+        const item = await client.createFolder(fileName(path), parent)
         tree.upsert(item)
         return item.id
       })()
@@ -100,7 +100,7 @@ export async function executeOps(
         return
       }
       if (op.base === undefined || sameContent(existing.md5, op.base)) {
-        const item = await client.updateContent(existing.id, basename(op.path), op.content)
+        const item = await client.updateContent(existing.id, fileName(op.path), op.content)
         tree.upsert(item)
         if (text !== null) result.written.push({ path: op.path, md5: item.md5 ?? md5!, content: text })
         result.saved.push(op.path)
@@ -114,7 +114,7 @@ export async function executeOps(
       result.conflicts.push({ path: op.path, copyPath: target })
     }
     const parent = await ensureFolder(dirname(target))
-    const item = await client.createFile(basename(target), parent, op.content)
+    const item = await client.createFile(fileName(target), parent, op.content)
     tree.upsert(item)
     if (text !== null) result.written.push({ path: target, md5: item.md5 ?? md5!, content: text })
     result.saved.push(op.path)
@@ -126,7 +126,7 @@ export async function executeOps(
       return
     }
     const e = tree.entry(op.path)
-    if (!e) throw new DriveError('not-found', `"${basename(op.path)}" no longer exists.`)
+    if (!e) throw new DriveError('not-found', `"${fileName(op.path)}" no longer exists.`)
     if (op.kind === 'trash') {
       await client.trash(e.id)
       tree.remove(e.id)
@@ -136,7 +136,7 @@ export async function executeOps(
     const to = dirname(op.to)
     const toId = from === to ? undefined : await ensureFolder(to)
     const item = await client.update(e.id, {
-      name: basename(op.to),
+      name: fileName(op.to),
       ...(toId ? { from: tree.folderId(from), to: toId } : {}),
     })
     tree.upsert(item)

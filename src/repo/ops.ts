@@ -3,6 +3,8 @@ import type { DriveOp } from './apply.ts'
 import {
   basename,
   childFolderOf,
+  encodeName,
+  fileName,
   dirname,
   isInside,
   isNotePath,
@@ -37,7 +39,7 @@ export interface Op {
 function checkName(name: string): string {
   const err = validateName(name)
   if (err) throw new OpError(err)
-  return name.trim()
+  return encodeName(name.trim())
 }
 
 /** Adds ".md" unless the user typed it. */
@@ -82,21 +84,21 @@ const writeMeta = (folder: string, meta: FolderMeta): DriveOp =>
 
 /** Meta writes that carry a note's icon from `from` to `to` (or drop it if `to` is null). */
 function moveNoteIcon(metas: Metas, from: string, to: string | null): DriveOp[] {
-  const icon = metas[dirname(from)]?.notes?.[basename(from)]
+  const icon = metas[dirname(from)]?.notes?.[fileName(from)]
   if (!icon) return []
-  const src = withNoteIcon(metas[dirname(from)] ?? {}, basename(from), undefined)
+  const src = withNoteIcon(metas[dirname(from)] ?? {}, fileName(from), undefined)
   if (to === null) return [writeMeta(dirname(from), src)]
-  if (dirname(to) === dirname(from)) return [writeMeta(dirname(to), withNoteIcon(src, basename(to), icon))]
+  if (dirname(to) === dirname(from)) return [writeMeta(dirname(to), withNoteIcon(src, fileName(to), icon))]
   return [
     writeMeta(dirname(from), src),
-    writeMeta(dirname(to), withNoteIcon(metas[dirname(to)] ?? {}, basename(to), icon)),
+    writeMeta(dirname(to), withNoteIcon(metas[dirname(to)] ?? {}, fileName(to), icon)),
   ]
 }
 
 /** Create a note in `folder`. For a sub-note, `folder` is the parent note's `childFolderOf`. */
 export function createNoteOp(folder: string, name: string, entries: Entry[]): Op {
   const path = joinPath(folder, noteFileName(name))
-  if (taken(entries, path)) throw new OpError(`A note named "${basename(path)}" already exists here.`)
+  if (taken(entries, path)) throw new OpError(`A note named "${fileName(path)}" already exists here.`)
   if (taken(entries, childFolderOf(path)))
     throw new OpError(`A folder named "${noteTitle(path)}" already exists here.`)
   return { ops: [{ kind: 'write', path, content: '', base: null }], target: path }
@@ -104,9 +106,9 @@ export function createNoteOp(folder: string, name: string, entries: Entry[]): Op
 
 export function createFolderOp(parent: string, name: string, entries: Entry[]): Op {
   const path = joinPath(parent, checkName(name))
-  if (taken(entries, path)) throw new OpError(`A folder named "${basename(path)}" already exists here.`)
+  if (taken(entries, path)) throw new OpError(`A folder named "${fileName(path)}" already exists here.`)
   if (taken(entries, path + NOTE_EXT))
-    throw new OpError(`A note named "${basename(path)}" already exists here.`)
+    throw new OpError(`A note named "${fileName(path)}" already exists here.`)
   return { ops: [{ kind: 'mkdir', path }], target: path }
 }
 
@@ -117,7 +119,7 @@ export function renameNoteOp(path: string, newName: string, entries: Entry[], me
   if (to === path) return { ops: [], target: path }
   // Case-only renames are fine; anything else must be free.
   if (to.toLowerCase() !== path.toLowerCase()) {
-    if (taken(entries, to)) throw new OpError(`A note named "${basename(to)}" already exists here.`)
+    if (taken(entries, to)) throw new OpError(`A note named "${fileName(to)}" already exists here.`)
     if (taken(entries, childFolderOf(to)))
       throw new OpError(`A folder named "${noteTitle(to)}" already exists here.`)
   }
@@ -159,9 +161,9 @@ export function renameFolderOp(folder: string, newName: string, entries: Entry[]
   const to = joinPath(dirname(folder), checkName(newName))
   if (to === folder) return { ops: [], target: folder }
   if (to.toLowerCase() !== folder.toLowerCase()) {
-    if (taken(entries, to)) throw new OpError(`A folder named "${basename(to)}" already exists here.`)
+    if (taken(entries, to)) throw new OpError(`A folder named "${fileName(to)}" already exists here.`)
     if (taken(entries, to + NOTE_EXT))
-      throw new OpError(`A note named "${basename(to)}" already exists here.`)
+      throw new OpError(`A note named "${fileName(to)}" already exists here.`)
   }
   const moved = movedPaths(entries, [[folder, to]])
   delete moved[folder]
@@ -174,15 +176,15 @@ export function renameFolderOp(folder: string, newName: string, entries: Entry[]
  */
 export function moveOp(path: string, toFolder: string, entries: Entry[], metas: Metas = {}): Op {
   const src = find(entries, path)
-  if (!src) throw new OpError(`"${basename(path)}" no longer exists.`)
+  if (!src) throw new OpError(`"${fileName(path)}" no longer exists.`)
   if (!isContainer(entries, toFolder)) throw new OpError('The target no longer exists.')
   if (dirname(path) === toFolder) return { ops: [], target: path }
   const own = src.folder ? path : childFolderOf(path) // where its contents live
   if (toFolder !== '' && isInside(toFolder, own))
     throw new OpError(`“${noteTitle(path)}” cannot be moved into itself.`)
-  const to = joinPath(toFolder, basename(path))
+  const to = joinPath(toFolder, fileName(path))
   if (taken(entries, to) || taken(entries, pairOf(to, src.folder))) {
-    const where = toFolder ? `“${basename(toFolder)}”` : 'the top level'
+    const where = toFolder ? `“${fileName(toFolder)}”` : 'the top level'
     throw new OpError(`An item named "${noteTitle(path)}" already exists in ${where}.`)
   }
   const child = src.folder ? undefined : childFolder(entries, path)
@@ -231,7 +233,7 @@ export function setFolderIconOp(folder: string, icon: string | undefined, curren
 /** A note's icon lives in its folder's `_meta.json` under `notes`. */
 export function setNoteIconOp(note: string, icon: string | undefined, metas: Metas): Op {
   const folder = dirname(note)
-  return { ops: [writeMeta(folder, withNoteIcon(metas[folder] ?? {}, basename(note), icon))] }
+  return { ops: [writeMeta(folder, withNoteIcon(metas[folder] ?? {}, fileName(note), icon))] }
 }
 
 /** Number of notes affected by deleting a folder (for the confirmation message). */
@@ -306,7 +308,7 @@ export function suggestIcons(
     if (e.path === folder || !isInside(e.path, folder) || basename(e.path).startsWith('.')) continue
     if (e.folder) {
       if (notes.has(e.path + NOTE_EXT) || metas[e.path]?.icon) continue
-    } else if (!isNotePath(e.path) || metas[dirname(e.path)]?.notes?.[basename(e.path)]) continue
+    } else if (!isNotePath(e.path) || metas[dirname(e.path)]?.notes?.[fileName(e.path)]) continue
     const icon = suggest(noteTitle(e.path))
     if (icon) out.push({ path: e.path, folder: e.folder, icon })
   }
@@ -319,7 +321,7 @@ export function setIconsOp(suggestions: IconSuggestion[], metas: Metas): Op {
   const get = (f: string) => next.get(f) ?? { ...metas[f] }
   for (const s of suggestions) {
     if (s.folder) next.set(s.path, { ...get(s.path), icon: s.icon })
-    else next.set(dirname(s.path), withNoteIcon(get(dirname(s.path)), basename(s.path), s.icon))
+    else next.set(dirname(s.path), withNoteIcon(get(dirname(s.path)), fileName(s.path), s.icon))
   }
   return { ops: [...next].map(([f, meta]) => writeMeta(f, meta)) }
 }

@@ -38,7 +38,9 @@ describe('operation builders', () => {
     })
     expect(createNoteOp('', 'x.md', entries).target).toBe('x.md')
     expect(() => createNoteOp('Work', 'plan', entries)).toThrow('already exists')
-    expect(() => createNoteOp('', 'a/b', entries)).toThrow('slashes')
+    expect(() => createNoteOp('', 'a\\b', entries)).toThrow('backslashes')
+    // A slash is part of the name, not a folder separator
+    expect(createNoteOp('Work', 'CI/CD', entries).target).toBe('Work/CI\uE000CD.md')
   })
 
   it('createFolderOp creates a real (empty) folder', () => {

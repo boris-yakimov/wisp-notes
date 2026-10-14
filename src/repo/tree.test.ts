@@ -80,7 +80,9 @@ describe('paths', () => {
   it('noteTitle strips extension', () => expect(noteTitle('a/b/My Note.md')).toBe('My Note'))
   it('validateName', () => {
     expect(validateName('ok')).toBeNull()
-    expect(validateName('a/b')).not.toBeNull()
+    expect(validateName('CI/CD')).toBeNull()
+    expect(validateName('a\\b')).not.toBeNull()
+    expect(validateName('a\uE000b')).not.toBeNull()
     expect(validateName('  ')).not.toBeNull()
     expect(validateName('.hidden')).not.toBeNull()
   })
