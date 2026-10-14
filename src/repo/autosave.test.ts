@@ -4,46 +4,51 @@ import { DriveError } from '../drive/errors.ts'
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
 
-function setup(flushImpl: () => Promise<{ remaining: number }> = async () => ({ remaining: 0 })) {
+function setup(
+  flushImpl: () => Promise<{ remaining: number }> = async () => ({ remaining: 0 }),
+  opts: { idleMs?: number; maxMs?: number } = {},
+) {
   const flush = vi.fn(flushImpl)
   const statuses: string[] = []
-  const saver = new AutoSaver(flush, (s) => statuses.push(s), {
-    idleMs: 3000,
-    maxMs: 45_000,
-    retryBaseMs: 1000,
-  })
+  const saver = new AutoSaver(flush, (s) => statuses.push(s), { retryBaseMs: 1000, ...opts })
   return { saver, flush, statuses }
 }
 
 describe('AutoSaver', () => {
-  it('saves after 3s idle', async () => {
+  it('by default saves 60s after the first change, not when idle', async () => {
     const { saver, flush, statuses } = setup()
     saver.notifyChange()
     expect(saver.status).toBe('unsaved')
-    await vi.advanceTimersByTimeAsync(2999)
+    await vi.advanceTimersByTimeAsync(59_999)
     expect(flush).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(flush).toHaveBeenCalledTimes(1)
     expect(statuses).toEqual(['unsaved', 'saving', 'saved'])
   })
 
-  it('debounces bursts of changes into one save', async () => {
+  it('saves once per minute while typing continuously', async () => {
     const { saver, flush } = setup()
+    for (let t = 0; t < 125_000; t += 1000) {
+      saver.notifyChange()
+      await vi.advanceTimersByTimeAsync(1000)
+    }
+    expect(flush).toHaveBeenCalledTimes(2) // at 60s and 120s
+  })
+
+  it('does nothing without changes', async () => {
+    const { flush } = setup()
+    await vi.advanceTimersByTimeAsync(300_000)
+    expect(flush).not.toHaveBeenCalled()
+  })
+
+  it('optionally debounces on idle', async () => {
+    const { saver, flush } = setup(undefined, { idleMs: 3000 })
     for (let i = 0; i < 5; i++) {
       saver.notifyChange()
       await vi.advanceTimersByTimeAsync(1000)
     }
     expect(flush).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(3000)
-    expect(flush).toHaveBeenCalledTimes(1)
-  })
-
-  it('saves at least every 45s while typing continuously', async () => {
-    const { saver, flush } = setup()
-    for (let t = 0; t < 46_000; t += 1000) {
-      saver.notifyChange()
-      await vi.advanceTimersByTimeAsync(1000)
-    }
     expect(flush).toHaveBeenCalledTimes(1)
   })
 
@@ -100,7 +105,7 @@ describe('AutoSaver', () => {
     await saver.saveNow()
     expect(saver.status).toBe('unsaved')
     expect(saver.hasPending).toBe(true)
-    await vi.advanceTimersByTimeAsync(3000)
+    await vi.advanceTimersByTimeAsync(60_000)
     expect(flush).toHaveBeenCalledTimes(2)
     expect(saver.status).toBe('saved')
   })

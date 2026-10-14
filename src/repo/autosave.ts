@@ -8,9 +8,9 @@ export interface FlushOutcome {
 }
 
 export interface AutoSaverOptions {
-  /** Save after this much idle time since the last change. */
+  /** Also save after this much idle time since the last change. Off by default. */
   idleMs?: number
-  /** While typing continuously, commit at least this often. */
+  /** Save this long after the first unsaved change (further edits don't push it back). */
   maxMs?: number
   /** Retry delays grow exponentially from this value... */
   retryBaseMs?: number
@@ -19,12 +19,12 @@ export interface AutoSaverOptions {
 }
 
 /**
- * Debounced save scheduler. Knows nothing about Drive: `flush` does the work
- * (save all dirty drafts in one batch). Handles idle debounce, max interval,
+ * Save scheduler. Knows nothing about Drive: `flush` does the work (save all dirty drafts in one batch).
+ * By default saves once per minute while there are changes (plus `saveNow` for :w / Ctrl+S); handles
  * serialization (never two flushes at once) and retry with exponential backoff.
  */
 export class AutoSaver {
-  readonly idleMs: number
+  readonly idleMs: number | undefined
   readonly maxMs: number
   private retryBaseMs: number
   private retryMaxMs: number
@@ -49,8 +49,8 @@ export class AutoSaver {
   ) {
     this.flush = flush
     this.onStatus = onStatus
-    this.idleMs = opts.idleMs ?? 3000
-    this.maxMs = opts.maxMs ?? 45_000
+    this.idleMs = opts.idleMs
+    this.maxMs = opts.maxMs ?? 60_000
     this.retryBaseMs = opts.retryBaseMs ?? 2000
     this.retryMaxMs = opts.retryMaxMs ?? 60_000
   }
@@ -67,8 +67,10 @@ export class AutoSaver {
     if (this.status !== 'saving' && this.status !== 'offline' && this.status !== 'error') {
       this.setStatus('unsaved')
     }
-    clearTimeout(this.idleTimer)
-    this.idleTimer = setTimeout(() => void this.run(), this.idleMs)
+    if (this.idleMs !== undefined) {
+      clearTimeout(this.idleTimer)
+      this.idleTimer = setTimeout(() => void this.run(), this.idleMs)
+    }
     this.maxTimer ??= setTimeout(() => void this.run(), this.maxMs)
   }
 

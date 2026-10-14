@@ -57,7 +57,11 @@ test('sign in → browse → edit → auto-save → rename → search', async ({
   await page.keyboard.press('Escape')
   await expect(page.getByRole('status', { name: 'Save status: Unsaved' })).toBeVisible()
 
-  // Auto-save after ~3s idle
+  // No save on idle (auto-save runs once a minute); :w saves now
+  await page.waitForTimeout(4000)
+  await expect(page.getByRole('status', { name: 'Save status: Unsaved' })).toBeVisible()
+  await page.keyboard.type(':w')
+  await page.keyboard.press('Enter')
   await expect(page.getByRole('status', { name: 'Save status: Saved' })).toBeVisible({ timeout: 10_000 })
   expect(drive.files()['Work/Plan.md']).toContain('Added from the browser 🎉')
 
