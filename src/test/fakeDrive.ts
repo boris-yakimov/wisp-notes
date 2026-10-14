@@ -24,6 +24,8 @@ interface FFile {
   trashed: boolean
   appProperties: Record<string, string>
   created: number
+  /** Not created/opened by the app: invisible under the drive.file scope. */
+  foreign?: boolean
 }
 
 export interface FakeDriveOptions {
@@ -179,6 +181,23 @@ export class FakeDrive {
     return this.findPath(path)?.content
   }
 
+  /**
+   * Simulate the user moving/renaming the app folder in Drive, e.g. `['Personal']` + `'Notes'`.
+   * Folders in `parents` are the user's own (not visible to the app).
+   */
+  relocateRoot(parents: string[], name: string): void {
+    let parent = MY_DRIVE
+    for (const p of parents) {
+      const f = this.create({ name: p, mimeType: FOLDER, parents: [parent], foreign: true })
+      this.changeLog.pop()
+      parent = f.id
+    }
+    const root = this.store.get(this.rootId!)!
+    root.name = name
+    root.parents = [parent]
+    this.touch(root)
+  }
+
   /** Number of mutating requests (create/update/trash). */
   writeCount(): number {
     return this.log.filter((l) => l.method !== 'GET').length
@@ -246,7 +265,7 @@ export class FakeDrive {
     }
     if (method === 'GET' && path === '/drive/v3/files') {
       const query = q.get('q') ?? ''
-      let list = [...this.store.values()].filter((f) => !f.trashed)
+      let list = [...this.store.values()].filter((f) => !f.trashed && !f.foreign)
       if (query.includes('appProperties has')) list = list.filter((f) => f.appProperties.wispRoot === '1')
       list.sort((a, b) => a.created - b.created)
       const size = Math.min(Number(q.get('pageSize') ?? 100), this.maxPageSize)
@@ -260,9 +279,12 @@ export class FakeDrive {
         },
       }
     }
+    if (method === 'GET' && path === '/drive/v3/files/root') {
+      return { status: 200, body: { id: MY_DRIVE } }
+    }
     if ((m = path.match(/^\/drive\/v3\/files\/([^/]+)$/))) {
       const f = this.store.get(m[1]!)
-      if (!f) return err(404, 'File not found', 'notFound')
+      if (!f || f.foreign) return err(404, 'File not found', 'notFound')
       if (method === 'GET') {
         if (q.get('alt') === 'media')
           return { status: 200, body: null, raw: f.content ?? new Uint8Array(), contentType: f.mimeType }

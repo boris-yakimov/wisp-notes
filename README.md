@@ -12,7 +12,8 @@ npm run build      # static site in dist/
 npx vite preview   # serve the build at http://localhost:4173
 ```
 
-Sign in with Google on first start. Notes live in a **Wisp Notes** folder in your Drive. The app uses the
+Sign in with Google on first start. Notes live in a **Wisp Notes** folder in your Drive (you can rename it or move
+it anywhere in My Drive; Settings shows where it is). The app uses the
 `drive.file` permission, so it only sees files it created or imported. Use **Import folder** (sidebar header or a
 folder's menu) to bring in existing Markdown files such as a Notion export.
 

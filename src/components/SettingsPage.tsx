@@ -1,4 +1,4 @@
-import { CheckCircle2, Loader2, LogOut } from 'lucide-react'
+import { CheckCircle2, ExternalLink, Loader2, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getCache } from '../cache/instance.ts'
 import { getAuth, GOOGLE_CLIENT_ID } from '../drive/auth.ts'
@@ -71,9 +71,7 @@ export function SettingsPage({ onConnected }: Props) {
           <p className="mb-3 flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400">
             <CheckCircle2 size={16} /> Signed in as {account.email}
           </p>
-          <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
-            Notes are stored in the “Wisp Notes” folder in your Google Drive.
-          </p>
+          <NotesFolder email={account.email} />
           <button
             type="button"
             onClick={() => void signOut()}
@@ -176,4 +174,54 @@ const themeLabels: Record<Theme, string> = {
   dark: 'Dark',
   synthwave: 'Synthwave',
   terminal: 'Terminal',
+}
+
+type FolderInfo = { id: string; names: string[]; complete: boolean }
+
+/** Where the notes folder really is in Drive (the user may have moved or renamed it). */
+function NotesFolder({ email }: { email: string }) {
+  const [folder, setFolder] = useState<FolderInfo | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const client = new DriveClient(getAuth())
+    void (async () => {
+      const id = await client.findRoot()
+      if (!id) return
+      const path = await client.folderPath(id)
+      if (!cancelled) setFolder({ id, ...path })
+    })().catch(() => undefined) // offline / sign-in expired: keep the generic text
+    return () => {
+      cancelled = true
+    }
+  }, [email])
+
+  if (!folder) {
+    return (
+      <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+        Notes are stored in the app's folder in your Google Drive.
+      </p>
+    )
+  }
+  const shown = folder.complete ? folder.names : ['…', ...folder.names]
+  return (
+    <div className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+      <p>Notes are stored in this Google Drive folder:</p>
+      <p className="my-1 font-medium text-neutral-900 dark:text-neutral-100" data-testid="notes-folder">
+        {shown.join(' › ')}
+      </p>
+      {!folder.complete && (
+        <p className="mb-1 text-xs">
+          Wisp Notes can only see folders it created, so the folders above it are shown as “…”.
+        </p>
+      )}
+      <a
+        href={`https://drive.google.com/drive/folders/${encodeURIComponent(folder.id)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 text-indigo-600 hover:underline dark:text-indigo-400"
+      >
+        Open in Google Drive <ExternalLink size={12} aria-hidden />
+      </a>
+    </div>
+  )
 }

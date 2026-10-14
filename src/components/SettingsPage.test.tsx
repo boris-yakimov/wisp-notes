@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { getCache } from '../cache/instance.ts'
+import { getAuth } from '../drive/auth.ts'
+import { DriveClient } from '../drive/client.ts'
 import { defaultSettings, loadSettings } from '../settings/settings.ts'
 import { useApp } from '../store/app.ts'
 import { installFakeGis, storeToken } from '../test/fakeGis.ts'
@@ -49,7 +51,7 @@ describe('SettingsPage', () => {
 
   it('signs out after confirmation and clears local data', async () => {
     const gis = installFakeGis()
-    storeToken('tok')
+    storeToken('good-token') // valid for the fake Drive (the page looks up the notes folder)
     useApp.getState().updateSettings({ account: { email: 'me@example.com', name: 'Me' } })
     const cache = await getCache()
     await cache.putBlob('h', 'secret')
@@ -57,7 +59,7 @@ describe('SettingsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sign out' }))
     await vi.waitFor(() => expect(loadSettings().account).toBeNull())
-    expect(gis.revoked).toEqual(['tok'])
+    expect(gis.revoked).toEqual(['good-token'])
     expect(await cache.getBlob('h')).toBeUndefined()
   })
 
@@ -66,5 +68,29 @@ describe('SettingsPage', () => {
     renderPage()
     await userEvent.click(screen.getByLabelText('Vim mode'))
     expect(loadSettings().vim).toBe(false)
+  })
+
+  it('shows where the notes folder really is, with a link to it', async () => {
+    installFakeGis()
+    storeToken()
+    useApp.getState().updateSettings({ account: { email: 'me@example.com', name: 'Me' } })
+    await new DriveClient(getAuth()).ensureRoot()
+    renderPage()
+    expect(await screen.findByTestId('notes-folder')).toHaveTextContent('My Drive › Wisp Notes')
+    expect(screen.getByRole('link', { name: /Open in Google Drive/ })).toHaveAttribute(
+      'href',
+      `https://drive.google.com/drive/folders/${fake.drive.rootId}`,
+    )
+  })
+
+  it('shows "…" for moved-into folders the app cannot see', async () => {
+    installFakeGis()
+    storeToken()
+    useApp.getState().updateSettings({ account: { email: 'me@example.com', name: 'Me' } })
+    await new DriveClient(getAuth()).ensureRoot()
+    fake.drive.relocateRoot(['Personal'], 'Notes')
+    renderPage()
+    expect(await screen.findByTestId('notes-folder')).toHaveTextContent(/^… › Notes$/)
+    expect(screen.getByText(/can only see folders it created/)).toBeInTheDocument()
   })
 })

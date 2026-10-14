@@ -125,8 +125,8 @@ export class DriveClient {
     return { email: r.user.emailAddress, name: r.user.displayName }
   }
 
-  /** Find the app's root folder (created by this app on any device) or create it. */
-  async ensureRoot(): Promise<string> {
+  /** The app's root folder (created by this app on any device), or null if there is none yet. */
+  async findRoot(): Promise<string | null> {
     const r = await this.json<{ files: RawFile[] }>('GET', `${API}/files`, {
       query: {
         q: `appProperties has { key='${ROOT_PROP}' and value='1' } and trashed = false`,
@@ -136,12 +136,56 @@ export class DriveClient {
         spaces: 'drive',
       },
     })
-    if (r.files[0]) return r.files[0].id
+    return r.files[0]?.id ?? null
+  }
+
+  /** Find the app's root folder or create it. */
+  async ensureRoot(): Promise<string> {
+    const found = await this.findRoot()
+    if (found) return found
     const created = await this.json<RawFile>('POST', `${API}/files`, {
       query: { fields: 'id' },
       json: { name: ROOT_NAME, mimeType: FOLDER_MIME, appProperties: { [ROOT_PROP]: '1' } },
     })
     return created.id
+  }
+
+  /**
+   * Where a folder lives, e.g. `["My Drive", "Personal", "Notes"]`. The user may move or rename the app's
+   * folder in Drive. With the `drive.file` scope, folders the app didn't create can't be read: the
+   * walk stops there and `complete` is false (the UI shows "…").
+   */
+  async folderPath(id: string): Promise<{ names: string[]; complete: boolean }> {
+    const myDrive = await this.json<{ id: string }>('GET', `${API}/files/root`, {
+      query: { fields: 'id' },
+    }).then(
+      (r) => r.id,
+      () => null,
+    )
+    const names: string[] = []
+    let current: string | undefined = id
+    for (let depth = 0; current && depth < 32; depth++) {
+      let f: RawFile
+      try {
+        f = await this.json<RawFile>('GET', `${API}/files/${encodeURIComponent(current)}`, {
+          query: { fields: 'id,name,parents' },
+        })
+      } catch (e) {
+        if (depth === 0) throw e
+        const kind = toDriveError(e).kind
+        if (kind === 'not-found' || kind === 'forbidden') return { names, complete: false }
+        throw e
+      }
+      names.unshift(f.name)
+      const parent = f.parents?.[0]
+      if (!parent) return { names, complete: true }
+      if (parent === myDrive) {
+        names.unshift('My Drive')
+        return { names, complete: true }
+      }
+      current = parent
+    }
+    return { names, complete: false }
   }
 
   /** All non-trashed files and folders the app can see. */
