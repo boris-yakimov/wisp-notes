@@ -1,4 +1,5 @@
 import MiniSearch from 'minisearch'
+import { stripColors } from '../repo/textColors.ts'
 import { isHidden, isNotePath, noteTitle } from '../repo/paths.ts'
 
 /**
@@ -62,7 +63,12 @@ export class SearchIndex {
       seen.add(n.path)
       const version = n.content === undefined ? `${n.version}:pending` : n.version
       if (this.versions.get(n.path) === version) continue
-      const doc: Doc = { id: n.path, title: noteTitle(n.path), path: n.path, content: n.content ?? '' }
+      const doc: Doc = {
+        id: n.path,
+        title: noteTitle(n.path),
+        path: n.path,
+        content: stripColors(n.content ?? ''),
+      }
       if (this.mini.has(n.path)) this.mini.replace(doc)
       else this.mini.add(doc)
       this.versions.set(n.path, version)

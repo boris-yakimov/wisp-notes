@@ -7,6 +7,7 @@ import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useUi } from '../store/ui.ts'
+import { textColors } from './colors.ts'
 import { inlineImages, type ImageResolver } from './images.ts'
 import { linkClick } from './links.ts'
 import { livePreview } from './livePreview.ts'
@@ -161,6 +162,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     const previewExt = (on: boolean): Extension => [
       on ? [livePreview(), tablePreview(openLink)] : [],
       inlineImages(resolveImage, on),
+      textColors(on),
     ]
     previewRef.current = previewExt
     const save = () => {

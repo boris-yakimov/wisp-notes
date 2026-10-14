@@ -117,6 +117,15 @@ export function renderInline(text: string): DocumentFragment {
       },
     },
     { re: /<((?:https?:\/\/|mailto:)[^>\s]+)>/, make: (m) => link(m[1]!.replace(/^mailto:/, ''), m[1]!) },
+    {
+      re: /<span style="color:\s*(green|red);?">(.*?)<\/span>/i,
+      make: (m) => {
+        const el = document.createElement('span')
+        el.className = `cm-color-${m[1]!.toLowerCase()}`
+        el.append(renderInline(m[2]!))
+        return el
+      },
+    },
     { re: /\*\*(.+?)\*\*|__(.+?)__/, make: (m) => wrap('strong', m[1] ?? m[2]!) },
     { re: /~~(.+?)~~/, make: (m) => wrap('del', m[1]!) },
     {

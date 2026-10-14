@@ -431,3 +431,40 @@ test('tables show as a grid; arrow keys and vim j open them for editing', async 
   await table.getByText('Plan').click({ modifiers: ['ControlOrMeta'] })
   await expect(page).toHaveURL(/\/n\/Work\/Plan\.md$/)
 })
+
+test('color selected text green or red from the toolbar, also in vim visual mode', async ({
+  page,
+  drive,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'mouse/keyboard selection')
+  drive.write('Trips/Plan.md', 'Pay the deposit today\n\nBooking is paid\n\nend')
+  await signedIn(page) // vim on
+  await page.goto('/n/Trips/Plan.md')
+  const editor = page.locator('.cm-content')
+  await expect(editor).toContainText('the deposit')
+
+  // Mouse: double-click a word selects it, the toolbar appears
+  await editor.getByText('Pay the deposit today').dblclick({ position: { x: 5, y: 8 } })
+  await page.getByRole('button', { name: 'Color text red' }).click()
+  await expect(page.getByRole('toolbar', { name: 'Text color' })).toHaveCount(0)
+
+  // vim visual mode: select "paid" with v + e
+  await editor.getByText('Booking is paid').click()
+  await page.keyboard.press('Escape')
+  await page.keyboard.type('0wwve')
+  await expect(page.getByTestId('vim-mode')).toHaveText(/visual/i)
+  await page.getByRole('button', { name: 'Color text green' }).click()
+  await expect(page.getByTestId('vim-mode')).toHaveText(/normal/i)
+
+  await page.keyboard.type('G')
+  await expect(page.locator('.cm-color-red')).toHaveText('Pay')
+  await expect(page.locator('.cm-color-green')).toHaveText('paid')
+  await expect(editor).not.toContainText('<span') // tags hidden off the cursor line
+  await page.keyboard.press('ControlOrMeta+s')
+  await expect
+    .poll(() => drive.files()['Trips/Plan.md'])
+    .toBe(
+      '<span style="color: red">Pay</span> the deposit today\n\nBooking is <span style="color: green">paid</span>\n\nend',
+    )
+})

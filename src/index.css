@@ -7,6 +7,8 @@
 /* Editor colors (editor/theme.ts reads these, so CodeMirror switches with the class without reconfiguring). */
 :root {
   color-scheme: light;
+  --md-green: #15803d;
+  --md-red: #b91c1c;
   --app-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono-font: ui-monospace, SFMono-Regular, Menlo, monospace;
   --md-link: #4f46e5;
@@ -29,6 +31,8 @@
 
 :root.dark {
   color-scheme: dark;
+  --md-green: #86efac;
+  --md-red: #fca5a5;
   --md-link: #a5b4fc;
   --md-muted: #9ca3af;
   --md-quote: #a3a3a3;
@@ -48,6 +52,8 @@
    night colors and indigo accents for neon pink. Tailwind v4 utilities read these variables, so no
    component needs synthwave-specific classes. Palette after "SynthWave '84". */
 :root.synthwave {
+  --md-green: #72f1b8;
+  --md-red: #ff8b9a;
   --color-neutral-50: #fdf4ff;
   --color-neutral-100: #f4eaff;
   --color-neutral-200: #e2d3f5;
@@ -102,6 +108,8 @@
 /* Terminal: graphite + phosphor green, monospace everywhere, after cliamp.stream. Same approach as
    synthwave: remap the neutral/indigo scales. JetBrains Mono is used if installed (no web font: CSP). */
 :root.terminal {
+  --md-green: #8fe9a2;
+  --md-red: #f2a5a0;
   --app-font: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --mono-font: var(--app-font);
 
