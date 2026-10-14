@@ -1,6 +1,15 @@
 {
   "name": "wisp-notes",
   "private": true,
+  "description": "Minimal Markdown notes app that stores notes in your own Google Drive",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/boris-yakimov/wisp-notes.git"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "version": "0.0.0",
   "type": "module",
   "scripts": {

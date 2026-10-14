@@ -74,3 +74,4 @@ the app only sees files it created or imported.
 - Keep Drive/IndexedDB logic out of components: add methods to `RepoSession` or pure builders in `repo/`.
 - New operations: pure builder in `ops.ts` + unit test, then wire through `useTreeActions.run`.
 - All dependencies pinned to exact versions.
+- License: GPL-3.0-or-later (`LICENSE`). Runtime dependencies are MIT/ISC, which are GPL-compatible; check new ones.

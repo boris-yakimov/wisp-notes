@@ -84,8 +84,8 @@ export function SettingsPage({ onConnected }: Props) {
         <>
           <h2 className="mb-1 text-lg font-semibold">Sign in</h2>
           <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
-            Wisp Notes stores your notes in a “Wisp Notes” folder in your Google Drive. It can only access
-            files it created itself.
+            Wisp Notes stores your notes in a “Wisp Notes” folder in your Google Drive (you can move or rename
+            it later). It can only access files it created itself.
           </p>
           {GOOGLE_CLIENT_ID ? (
             <button

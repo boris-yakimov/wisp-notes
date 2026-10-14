@@ -1,5 +1,8 @@
 # Implementation Plan - wisp-notes (v2: Google Drive storage)
 
+> Historical planning notes from development. Some details (e.g. auto-save timing) have changed since; see
+> [README.md](README.md) and [ARCHITECTURE.md](ARCHITECTURE.md) for current behavior.
+
 ## Problem Statement
 
 Wisp Notes v1 (implemented) stores Markdown notes in a private GitHub repo. Notes will contain many
