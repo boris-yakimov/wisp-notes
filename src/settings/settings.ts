@@ -1,8 +1,8 @@
 /** Settings persisted per device in localStorage. */
 
-export type Theme = 'system' | 'light' | 'dark'
+export type Theme = 'system' | 'light' | 'dark' | 'synthwave'
 
-export const THEMES: readonly Theme[] = ['system', 'light', 'dark']
+export const THEMES: readonly Theme[] = ['system', 'light', 'dark', 'synthwave']
 
 export interface Account {
   email: string

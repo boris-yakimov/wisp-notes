@@ -14,7 +14,7 @@ import { AuthBanner, ImportProgress, Notices, SaveStatus, StatusBar } from './co
 import { SessionProvider } from './components/Workspace.tsx'
 import type { RepoSession } from './repo/session.ts'
 import { isConfigured } from './settings/settings.ts'
-import { applyDark, useIsDark } from './settings/theme.ts'
+import { applyTheme, useResolvedTheme } from './settings/theme.ts'
 import { useApp } from './store/app.ts'
 
 const iconBtn =
@@ -32,8 +32,8 @@ export default function App() {
   const account = useApp((s) => s.settings.account)
   const configured = useApp((s) => isConfigured(s.settings))
   const navigate = useNavigate()
-  const dark = useIsDark()
-  useLayoutEffect(() => applyDark(dark), [dark])
+  const theme = useResolvedTheme()
+  useLayoutEffect(() => applyTheme(theme), [theme])
   return (
     <Routes>
       <Route

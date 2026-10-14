@@ -20,6 +20,9 @@
   --md-bullet: #737373;
   --md-cursor: #171717;
   --md-selection: #c7d2fe;
+  --md-heading: inherit;
+  --md-glow: none;
+  --md-vim-cursor: #ff9696;
 }
 
 :root.dark {
@@ -37,6 +40,61 @@
   --md-bullet: #a3a3a3;
   --md-cursor: #f5f5f5;
   --md-selection: #3730a3;
+}
+
+/* Synthwave: a dark theme (`.dark` is set too) that swaps Tailwind's neutral scale for violet-tinted
+   night colors and indigo accents for neon pink. Tailwind v4 utilities read these variables, so no
+   component needs synthwave-specific classes. Palette after "SynthWave '84". */
+:root.synthwave {
+  --color-neutral-50: #fdf4ff;
+  --color-neutral-100: #f4eaff;
+  --color-neutral-200: #e2d3f5;
+  --color-neutral-300: #c9b3e6;
+  --color-neutral-400: #a58fc7;
+  --color-neutral-500: #7f6aa3;
+  --color-neutral-600: #5a4a7a;
+  --color-neutral-700: #43365e;
+  --color-neutral-800: #34294a;
+  --color-neutral-900: #241b35;
+  --color-neutral-950: #1a1026;
+
+  --color-indigo-50: #fff0fb;
+  --color-indigo-100: #ffd6f5;
+  --color-indigo-200: #ffb3ec;
+  --color-indigo-300: #ff8fe2;
+  --color-indigo-400: #ff7edb;
+  --color-indigo-500: #ff4fcf;
+  --color-indigo-600: #e62eb4;
+  --color-indigo-700: #b81f90;
+  --color-indigo-800: #7d1866;
+  --color-indigo-900: #4f1247;
+  --color-indigo-950: #2e0b2c;
+
+  --md-link: #36f9f6;
+  --md-muted: #a58fc7;
+  --md-quote: #c9b3e6;
+  --md-syntax: #7f6aa3;
+  --md-keyword: #fede5d;
+  --md-string: #ff8b39;
+  --md-comment: #848bbd;
+  --md-number: #f97e72;
+  --md-code-bg: #2a1f3d;
+  --md-rule: #ff7edb;
+  --md-bullet: #36f9f6;
+  --md-cursor: #36f9f6;
+  --md-selection: #5b2a6e;
+  --md-heading: #ff7edb;
+  --md-glow: 0 0 2px #ff7edb, 0 0 10px #fc28a8aa;
+  --md-vim-cursor: #36f9f6;
+  accent-color: #ff7edb; /* checkboxes, radios */
+}
+
+/* Sunset glow behind the app. */
+:root.synthwave body {
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% 115%, #fc28a855, transparent 70%),
+    linear-gradient(to bottom, #1a1026, #241b35);
+  background-attachment: fixed;
 }
 
 html,

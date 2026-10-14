@@ -2,6 +2,9 @@ import { useSyncExternalStore } from 'react'
 import { useApp } from '../store/app.ts'
 import type { Theme } from './settings.ts'
 
+/** The look actually shown: "system" resolved against the OS preference. */
+export type ResolvedTheme = 'light' | 'dark' | 'synthwave'
+
 const QUERY = '(prefers-color-scheme: dark)'
 
 function systemDark(): boolean {
@@ -15,23 +18,29 @@ function subscribeSystem(onChange: () => void): () => void {
   return () => mq.removeEventListener('change', onChange)
 }
 
-export function isDark(theme: Theme, system: boolean): boolean {
-  return theme === 'dark' || (theme === 'system' && system)
+export function resolveTheme(theme: Theme, systemIsDark: boolean): ResolvedTheme {
+  if (theme === 'system') return systemIsDark ? 'dark' : 'light'
+  return theme
 }
 
-/** Toggles the `.dark` class on <html> that Tailwind's `dark:` variant and the editor colors key off. */
-export function applyDark(dark: boolean): void {
-  document.documentElement.classList.toggle('dark', dark)
+/**
+ * Sets the classes on <html> that the styles key off: `.dark` drives Tailwind's `dark:` variant
+ * (synthwave is a dark theme too), `.synthwave` remaps the palette and editor colors (index.css).
+ */
+export function applyTheme(resolved: ResolvedTheme): void {
+  const cl = document.documentElement.classList
+  cl.toggle('dark', resolved !== 'light')
+  cl.toggle('synthwave', resolved === 'synthwave')
 }
 
 /** Apply a theme once, before React renders (avoids a light flash on dark startup). */
 export function applyThemeNow(theme: Theme): void {
-  applyDark(isDark(theme, systemDark()))
+  applyTheme(resolveTheme(theme, systemDark()))
 }
 
-/** Whether the app is currently dark, following the setting and (for "system") the OS preference. */
-export function useIsDark(): boolean {
+/** The current look, following the setting and (for "system") the OS preference live. */
+export function useResolvedTheme(): ResolvedTheme {
   const theme = useApp((s) => s.settings.theme)
   const system = useSyncExternalStore(subscribeSystem, systemDark, () => false)
-  return isDark(theme, system)
+  return resolveTheme(theme, system)
 }

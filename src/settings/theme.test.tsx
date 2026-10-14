@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { setupFakeDrive } from '../test/msw.ts'
 import { getEditorView, renderApp } from '../test/renderApp.tsx'
 import { loadSettings } from './settings.ts'
-import { isDark } from './theme.ts'
+import { resolveTheme } from './theme.ts'
 
 setupFakeDrive({ files: { 'Inbox.md': '# Inbox' } })
 
@@ -35,15 +35,16 @@ function stubSystemDark(initial: boolean) {
 
 afterEach(() => {
   window.matchMedia = realMatchMedia
-  html.classList.remove('dark')
+  html.classList.remove('dark', 'synthwave')
 })
 
 describe('theme', () => {
   it('resolves explicit and system themes', () => {
-    expect(isDark('dark', false)).toBe(true)
-    expect(isDark('light', true)).toBe(false)
-    expect(isDark('system', true)).toBe(true)
-    expect(isDark('system', false)).toBe(false)
+    expect(resolveTheme('dark', false)).toBe('dark')
+    expect(resolveTheme('light', true)).toBe('light')
+    expect(resolveTheme('synthwave', false)).toBe('synthwave')
+    expect(resolveTheme('system', true)).toBe('dark')
+    expect(resolveTheme('system', false)).toBe('light')
   })
 
   it('defaults to system and ignores invalid stored values', () => {
@@ -60,6 +61,12 @@ describe('theme', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Light' }))
     expect(html).not.toHaveClass('dark')
     expect(loadSettings().theme).toBe('light')
+    await userEvent.click(screen.getByRole('radio', { name: 'Synthwave' }))
+    expect(html).toHaveClass('dark', 'synthwave')
+    expect(loadSettings().theme).toBe('synthwave')
+    await userEvent.click(screen.getByRole('radio', { name: 'Dark' }))
+    expect(html).toHaveClass('dark')
+    expect(html).not.toHaveClass('synthwave')
   })
 
   it('follows the OS preference live when set to system', async () => {
@@ -70,5 +77,11 @@ describe('theme', () => {
     setSystem(false)
     await waitFor(() => expect(html).not.toHaveClass('dark'))
     expect(getEditorView().state.facet(EditorView.darkTheme)).toBe(false)
+  })
+  it('synthwave gives the editor a dark scheme regardless of the OS', async () => {
+    stubSystemDark(false)
+    renderApp('/n/Inbox.md', { theme: 'synthwave' })
+    await waitFor(() => expect(getEditorView().state.facet(EditorView.darkTheme)).toBe(true))
+    expect(html).toHaveClass('synthwave')
   })
 })

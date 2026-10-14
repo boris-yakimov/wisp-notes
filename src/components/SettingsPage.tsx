@@ -170,4 +170,9 @@ function Preferences() {
   )
 }
 
-const themeLabels: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' }
+const themeLabels: Record<Theme, string> = {
+  system: 'System',
+  light: 'Light',
+  dark: 'Dark',
+  synthwave: 'Synthwave',
+}

@@ -8,7 +8,7 @@ const Editor = lazy(() => import('../editor/Editor.tsx').then((m) => ({ default:
 import { noteTitle } from '../repo/paths.ts'
 import { useSession } from '../repo/SessionContext.ts'
 import { useRepo } from '../repo/session.ts'
-import { useIsDark } from '../settings/theme.ts'
+import { useResolvedTheme } from '../settings/theme.ts'
 import { useApp } from '../store/app.ts'
 import { useUi } from '../store/ui.ts'
 
@@ -28,7 +28,7 @@ export interface NoteNavState {
 function NoteView({ path }: { path: string }) {
   const session = useSession()
   const settings = useApp((s) => s.settings)
-  const dark = useIsDark()
+  const dark = useResolvedTheme() !== 'light'
   const setVimMode = useUi((s) => s.setVimMode)
   const expandTo = useUi((s) => s.expandTo)
   const location = useLocation()
