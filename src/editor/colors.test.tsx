@@ -15,16 +15,20 @@ function colorize(marked: string, color: TextColor | null): string {
 }
 const G = (t: string) => `<span style="color: green">${t}</span>`
 const R = (t: string) => `<span style="color: red">${t}</span>`
+const O = (t: string) => `<span style="color: orange">${t}</span>`
+const B = (t: string) => `<span style="color: blue">${t}</span>`
 
 describe('text colors', () => {
   it('finds colored spans and strips them for search', () => {
-    const text = `a ${G('ok')} b ${R('no')}`
+    const text = `a ${G('ok')} b ${R('no')} c ${O('maybe')} d ${B('info')}`
     expect(findColorSpans(text).map((s) => [s.color, text.slice(s.textFrom, s.textTo)])).toEqual([
       ['green', 'ok'],
       ['red', 'no'],
+      ['orange', 'maybe'],
+      ['blue', 'info'],
     ])
-    expect(stripColors(text)).toBe('a ok b no')
-    expect(findColorSpans('<span style="color: blue">x</span> <span onclick="x">y</span>')).toEqual([])
+    expect(stripColors(text)).toBe('a ok b no c maybe d info')
+    expect(findColorSpans('<span style="color: teal">x</span> <span onclick="x">y</span>')).toEqual([])
   })
 
   it('wraps the selection, per line', () => {
@@ -34,6 +38,7 @@ describe('text colors', () => {
 
   it('recolors or clears a span the selection is inside', () => {
     expect(colorize(`x ${G('[paid]')} y`, 'red')).toBe(`x ${R('paid')} y`)
+    expect(colorize(`x ${R('[late]')} y`, 'orange')).toBe(`x ${O('late')} y`)
     expect(colorize(`x ${G('p[ai]d')} y`, null)).toBe('x paid y')
   })
 
@@ -74,5 +79,18 @@ describe('text colors in the editor', () => {
     setup(`Pay ${R('late')}`, false)
     expect(document.querySelector('.cm-color-red')).toHaveTextContent('late')
     expect(document.querySelector('.cm-content')!.textContent).toContain('</span>')
+  })
+
+  it('offers every color in the toolbar', () => {
+    const view = setup('Pay the deposit today')
+    view.dispatch({ selection: { anchor: 4, head: 15 } })
+    const labels = [...document.querySelectorAll('.cm-color-toolbar button')].map((b) => b.textContent)
+    expect(labels).toEqual(['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple', 'Gray', 'Clear'])
+    document.querySelector<HTMLButtonElement>('[aria-label="Color text orange"]')!.click()
+    expect(view.state.doc.toString()).toBe(`Pay ${O('the deposit')} today`)
+    expect(document.querySelector('.cm-color-orange')).toHaveTextContent('the deposit')
+    view.dispatch({ selection: { anchor: 4, head: view.state.doc.length - 6 } })
+    document.querySelector<HTMLButtonElement>('[aria-label="Color text blue"]')!.click()
+    expect(view.state.doc.toString()).toBe('Pay <span style="color: blue">the deposit</span> today')
   })
 })

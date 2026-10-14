@@ -122,7 +122,15 @@ function colorDisplay(hideTags: boolean): Extension {
 
 // ------------------------------------------------------------------ toolbar on selection
 
-const LABELS: Record<TextColor, string> = { green: 'Green', red: 'Red' }
+const LABELS: Record<TextColor, string> = {
+  red: 'Red',
+  orange: 'Orange',
+  yellow: 'Yellow',
+  green: 'Green',
+  blue: 'Blue',
+  purple: 'Purple',
+  gray: 'Gray',
+}
 
 function toolbar(state: EditorState): Tooltip | null {
   const r = state.selection.main

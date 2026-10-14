@@ -8,6 +8,7 @@ import {
   type Range,
 } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { COLOR_SPAN_SOURCE } from '../repo/textColors.ts'
 
 /**
  * Live preview of GFM tables: a table is drawn as a grid unless the cursor is on one of its lines,
@@ -118,7 +119,7 @@ export function renderInline(text: string): DocumentFragment {
     },
     { re: /<((?:https?:\/\/|mailto:)[^>\s]+)>/, make: (m) => link(m[1]!.replace(/^mailto:/, ''), m[1]!) },
     {
-      re: /<span style="color:\s*(green|red);?">(.*?)<\/span>/i,
+      re: new RegExp(COLOR_SPAN_SOURCE, 'i'),
       make: (m) => {
         const el = document.createElement('span')
         el.className = `cm-color-${m[1]!.toLowerCase()}`

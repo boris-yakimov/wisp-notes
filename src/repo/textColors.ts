@@ -1,15 +1,18 @@
 /**
- * Colored text, stored as `<span style="color: green">text</span>` (or red) so other Markdown apps
- * show it too. Only these two exact forms are recognized; the editor styles them with decorations
+ * Colored text, stored as `<span style="color: green">text</span>` (or another of TEXT_COLORS) so other Markdown
+ * apps show it too. Only these exact forms are recognized; the editor styles them with decorations
  * (editor/colors.ts) and never renders them as HTML.
  */
 
-export type TextColor = 'green' | 'red'
-export const TEXT_COLORS: readonly TextColor[] = ['green', 'red']
+/** In toolbar order. Each needs a `--md-<color>` CSS variable per theme (index.css). */
+export const TEXT_COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'] as const
+export type TextColor = (typeof TEXT_COLORS)[number]
 
 export const OPEN = (c: TextColor) => `<span style="color: ${c}">`
 export const CLOSE = '</span>'
-const SPAN = /<span style="color:\s*(green|red);?">(.*?)<\/span>/gi
+/** Source of the span pattern: group 1 is the color, group 2 the text. Also used by editor/tables.ts. */
+export const COLOR_SPAN_SOURCE = `<span style="color:\\s*(${TEXT_COLORS.join('|')});?">(.*?)<\\/span>`
+const SPAN = new RegExp(COLOR_SPAN_SOURCE, 'gi')
 
 export interface ColorSpan {
   /** Whole span including tags. */

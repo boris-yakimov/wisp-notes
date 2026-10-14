@@ -8,7 +8,12 @@
 :root {
   color-scheme: light;
   --md-green: #15803d;
+  --md-orange: #c2410c;
   --md-red: #b91c1c;
+  --md-yellow: #a16207;
+  --md-blue: #1d4ed8;
+  --md-purple: #7e22ce;
+  --md-gray: #6b7280;
   --app-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono-font: ui-monospace, SFMono-Regular, Menlo, monospace;
   --md-link: #4f46e5;
@@ -32,7 +37,12 @@
 :root.dark {
   color-scheme: dark;
   --md-green: #86efac;
+  --md-orange: #fdba74;
   --md-red: #fca5a5;
+  --md-yellow: #fde047;
+  --md-blue: #93c5fd;
+  --md-purple: #d8b4fe;
+  --md-gray: #9ca3af;
   --md-link: #a5b4fc;
   --md-muted: #9ca3af;
   --md-quote: #a3a3a3;
@@ -53,7 +63,12 @@
    component needs synthwave-specific classes. Palette after "SynthWave '84". */
 :root.synthwave {
   --md-green: #72f1b8;
+  --md-orange: #ff9e57;
   --md-red: #ff8b9a;
+  --md-yellow: #fede5d;
+  --md-blue: #36f9f6;
+  --md-purple: #ff7edb;
+  --md-gray: #a39cb8;
   --color-neutral-50: #fdf4ff;
   --color-neutral-100: #f4eaff;
   --color-neutral-200: #e2d3f5;
@@ -109,7 +124,12 @@
    synthwave: remap the neutral/indigo scales. JetBrains Mono is used if installed (no web font: CSP). */
 :root.terminal {
   --md-green: #8fe9a2;
+  --md-orange: #f5c08a;
   --md-red: #f2a5a0;
+  --md-yellow: #efe08f;
+  --md-blue: #9cc8f2;
+  --md-purple: #d3b3f0;
+  --md-gray: #9aa39b;
   --app-font: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --mono-font: var(--app-font);
 

@@ -1,6 +1,7 @@
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
+import { TEXT_COLORS } from '../repo/textColors.ts'
 
 /** Markdown highlighting used in both raw and live-preview modes. */
 export const markdownHighlight = syntaxHighlighting(
@@ -110,8 +111,7 @@ export const editorTheme = EditorView.theme({
   '.cm-table th': { backgroundColor: 'var(--md-code-bg)', fontWeight: '600' },
   '.cm-table code': { fontFamily: 'var(--mono-font)', fontSize: '0.9em' },
   '.cm-table-link': { color: 'var(--md-link)', textDecoration: 'underline' },
-  '.cm-color-green': { color: 'var(--md-green)' },
-  '.cm-color-red': { color: 'var(--md-red)' },
+  ...Object.fromEntries(TEXT_COLORS.map((c) => [`.cm-color-${c}`, { color: `var(--md-${c})` }])),
   '.cm-tooltip.cm-color-toolbar': {
     display: 'flex',
     gap: '2px',
@@ -133,8 +133,7 @@ export const editorTheme = EditorView.theme({
     color: 'var(--md-muted)',
   },
   '.cm-color-btn:hover, .cm-color-btn:focus-visible': { backgroundColor: 'var(--md-selection)' },
-  '.cm-color-btn.cm-color-green': { color: 'var(--md-green)' },
-  '.cm-color-btn.cm-color-red': { color: 'var(--md-red)' },
+  ...Object.fromEntries(TEXT_COLORS.map((c) => [`.cm-color-btn.cm-color-${c}`, { color: `var(--md-${c})` }])),
   '.cm-panels': { fontFamily: 'ui-monospace, monospace', fontSize: '14px' },
   '.cm-vim-panel input': { fontFamily: 'ui-monospace, monospace' },
 })
