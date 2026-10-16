@@ -49,6 +49,8 @@ npm ci
   Kubernetes, AWS) for everything inside that has none yet, shows them, and saves after you confirm.
 - **Saving**: edits are stored on the device immediately and saved to Drive once a minute, on `:w` / `Ctrl/Cmd+S`,
   before renames/moves/deletes, and when you close the tab.
+- **Sidebar width**: drag the sidebar's right edge to make it wider or narrower (double-click it to reset); the
+  width is remembered on this device.
 - **Shortcuts**: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+click` a link to open it (links to
   other notes open in the app, websites in a new tab).
 - **Text color**: select text (mouse, or vim visual mode) and pick a color (Red, Orange, Yellow, Green, Blue, Purple, Gray) or **Clear** in the small

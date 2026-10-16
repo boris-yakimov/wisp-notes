@@ -10,12 +10,35 @@ function loadExpanded(): Record<string, boolean> {
   }
 }
 
+const WIDTH_KEY = 'wisp-notes:sidebar-width'
+export const SIDEBAR_DEFAULT_WIDTH = 256
+export const SIDEBAR_MIN_WIDTH = 180
+export const SIDEBAR_MAX_WIDTH = 600
+
+/** Keep the sidebar within its limits, leaving room for the note. */
+export function clampSidebarWidth(w: number): number {
+  const roomy = typeof window !== 'undefined' ? window.innerWidth - 320 : SIDEBAR_MAX_WIDTH
+  const max = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, roomy))
+  return Math.round(Math.min(max, Math.max(SIDEBAR_MIN_WIDTH, w)))
+}
+
+function loadWidth(): number {
+  const w = Number(localStorage.getItem(WIDTH_KEY))
+  return Number.isFinite(w) && w > 0
+    ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, w))
+    : SIDEBAR_DEFAULT_WIDTH
+}
+
 const isSmallScreen = () => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches
 
 /** Pure UI state (no repo data). */
 export interface UiState {
   expanded: Record<string, boolean>
   sidebarOpen: boolean
+  /** Sidebar width in px on wide screens (drag its edge to change; saved on this device). */
+  sidebarWidth: number
+  /** `persist: false` while dragging; the final width is saved when the drag ends. */
+  setSidebarWidth: (width: number, persist?: boolean) => void
   quickOpen: boolean
   vimMode: string | null
   toggleFolder: (path: string) => void
@@ -37,6 +60,12 @@ export const useUi = create<UiState>((set, get) => {
   return {
     expanded: loadExpanded(),
     sidebarOpen: !isSmallScreen(),
+    sidebarWidth: loadWidth(),
+    setSidebarWidth: (width, save = true) => {
+      const sidebarWidth = clampSidebarWidth(width)
+      set({ sidebarWidth })
+      if (save) localStorage.setItem(WIDTH_KEY, String(sidebarWidth))
+    },
     quickOpen: false,
     vimMode: null,
     toggleFolder: (path) => persist({ ...get().expanded, [path]: !get().expanded[path] }),

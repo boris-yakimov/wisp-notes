@@ -488,3 +488,22 @@ test('color selected text green or red from the toolbar, also in vim visual mode
       '<span style="color: red">Pay</span> the deposit today\n\nBooking is <span style="color: green">paid</span>\n\nend',
     )
 })
+
+test('drag the sidebar edge to resize it; the width is remembered', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'The phone drawer has a fixed width')
+  await signedIn(page, false)
+  await page.goto('/')
+  const nav = await ensureSidebar(page)
+  const handle = page.getByRole('separator', { name: 'Resize sidebar' })
+  const before = (await nav.boundingBox())!.width
+  const h = (await handle.boundingBox())!
+  await page.mouse.move(h.x + h.width / 2, h.y + 200)
+  await page.mouse.down()
+  await page.mouse.move(h.x + h.width / 2 + 150, h.y + 200, { steps: 5 })
+  await page.mouse.up()
+  await expect.poll(async () => Math.round((await nav.boundingBox())!.width)).toBe(Math.round(before + 150))
+  await page.reload()
+  await expect.poll(async () => Math.round((await nav.boundingBox())!.width)).toBe(Math.round(before + 150))
+  await handle.dblclick()
+  await expect.poll(async () => Math.round((await nav.boundingBox())!.width)).toBe(Math.round(before))
+})
