@@ -18,6 +18,12 @@ export interface RemoteState {
   items: DriveItem[]
 }
 
+/** Drive file versions are increasing int64 numbers, sent as strings. */
+function isOlder(a: string, b: string): boolean {
+  if (!/^\d+$/.test(a) || !/^\d+$/.test(b)) return false
+  return a.length !== b.length ? a.length < b.length : a < b
+}
+
 /**
  * Remote Drive state keyed by file ID, with paths derived from the parent chain.
  * Items not reachable from the root folder are ignored. A "/" in a name is stored as `NAME_SLASH`
@@ -59,8 +65,12 @@ export class RemoteTree {
 
   applyChanges(changes: DriveChange[]): void {
     for (const c of changes) {
-      if (c.item) this.upsert(c.item)
-      else this.remove(c.fileId)
+      if (c.item) {
+        // The feed can lag behind our own writes: never replace an item with an older version of it.
+        const current = this.items.get(c.item.id)
+        if (current && isOlder(c.item.version, current.version)) continue
+        this.upsert(c.item)
+      } else this.remove(c.fileId)
     }
   }
 

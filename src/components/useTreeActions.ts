@@ -46,7 +46,10 @@ export function useTreeActions() {
   const entries = () => useRepo.getState().snapshot?.entries ?? []
   const metas = () => useRepo.getState().metas
 
-  /** Run an op: save affected drafts first, apply optimistically, follow moved/deleted open note. */
+  /**
+   * Run an op: apply it optimistically (unsaved edits of affected notes are saved with it, in the
+   * background), follow the moved/deleted open note, and go back if it fails.
+   */
   const run = useCallback(
     async (build: () => Op, verb: string, afterApply?: (op: Op) => void) => {
       let op: Op
@@ -57,27 +60,19 @@ export function useTreeActions() {
         return false
       }
       if (!op.ops.length) return true
-      const dirty = Object.keys(useRepo.getState().dirty)
-      if (dirty.some((d) => op.ops.some((o) => isInside(d, o.path)))) {
-        try {
-          await session.flushPending()
-        } catch (e) {
-          notify(
-            `Could not ${verb}: unsaved changes could not be saved first (${(e as Error).message})`,
-            'error',
-          )
-          return false
-        }
-      }
+      const movedTo = open ? op.moved?.[open] : undefined
       try {
         await session.applyOptimistic(op.ops, () => {
-          if (open && op.moved?.[open]) navigate(notePathToUrl(op.moved[open]!), { replace: true })
+          if (movedTo) navigate(notePathToUrl(movedTo), { replace: true })
           else if (open && op.ops.some((o) => o.kind === 'trash' && isInside(open, o.path)))
             navigate('/', { replace: true })
           afterApply?.(op)
         })
         return true
       } catch (e) {
+        // The note is still where it was: follow it back if it's still open.
+        if (open && movedTo && urlToNotePath(window.location.pathname) === movedTo)
+          navigate(notePathToUrl(open), { replace: true })
         notify(`Could not ${verb}: ${(e as Error).message}`, 'error')
         return false
       }

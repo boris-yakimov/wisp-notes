@@ -35,7 +35,7 @@ export interface ExecResult {
   written: { path: string; md5: string; content: string }[]
   /** Paths of write ops that succeeded (original op path). */
   saved: string[]
-  /** First failure, if any. Ops after a failed structural op are not run. */
+  /** First failure, if any. Ops after a failed op are not run, except other writes in the same run. */
   error?: unknown
 }
 
@@ -146,6 +146,8 @@ export async function executeOps(
   for (let i = 0; i < ops.length;) {
     const op = ops[i]!
     if (op.kind !== 'write') {
+      // Not after a failure: e.g. a note isn't moved when saving its edits first failed.
+      if (result.error) return result
       try {
         await structural(op)
         progress()

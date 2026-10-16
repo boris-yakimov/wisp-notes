@@ -258,6 +258,74 @@ describe('RepoSession operations', () => {
     expect(Object.keys(fake.drive.files()).some((x) => x.includes('conflict'))).toBe(false)
   })
 
+  it('keeps a move visible while Drive syncs and saves, and never shows the old place', async () => {
+    const s = await newSession({ idleMs: 60_000 })
+    await s.start()
+    fake.drive.write('Home/Other.md', 'from another device') // so the sync before the move has changes
+    const seen: string[][] = []
+    const unsub = useRepo.subscribe((st) => st.snapshot && seen.push(st.snapshot.entries.map((e) => e.path)))
+    const p = s.applyOptimistic([{ kind: 'rename', path: 'Inbox.md', to: 'Home/Inbox.md' }])
+    expect(s.exists('Home/Inbox.md')).toBe(true) // at once
+    await p
+    unsub()
+    expect(seen.length).toBeGreaterThan(1)
+    for (const view of seen) {
+      expect(view).toContain('Home/Inbox.md')
+      expect(view).not.toContain('Inbox.md')
+    }
+    expect(paths()).toContain('Home/Other.md')
+    expect(fake.drive.files()['Home/Inbox.md']).toBe('# Inbox')
+  })
+
+  it('moves a note with unsaved edits without waiting for a save first', async () => {
+    const s = await newSession({ idleMs: 60_000, maxMs: 60_000 })
+    await s.start()
+    await s.readNote('Inbox.md')
+    await s.editNote('Inbox.md', 'edited')
+    const p = s.applyOptimistic([{ kind: 'rename', path: 'Inbox.md', to: 'Work/Inbox.md' }])
+    await vi.waitFor(() => expect(s.exists('Work/Inbox.md')).toBe(true))
+    expect(await s.readNote('Work/Inbox.md')).toBe('edited') // the edits show at the new place
+    await p
+    expect(fake.drive.files()['Work/Inbox.md']).toBe('edited')
+    expect(fake.drive.files()['Inbox.md']).toBeUndefined()
+    expect(useRepo.getState().dirty).toEqual({})
+    expect(Object.keys(fake.drive.files()).some((x) => x.includes('conflict'))).toBe(false)
+  })
+
+  it('does not move a note whose edits could not be saved, and keeps the edits', async () => {
+    const s = await newSession({ idleMs: 60_000, maxMs: 60_000 })
+    await s.start()
+    await s.editNote('Inbox.md', 'edited')
+    fake.drive.failNext = (m, path) =>
+      m === 'PATCH' && path.startsWith('/upload/')
+        ? { status: 500, body: { error: { message: 'boom' } } }
+        : undefined
+    await expect(
+      s.applyOptimistic([{ kind: 'rename', path: 'Inbox.md', to: 'Work/Inbox.md' }]),
+    ).rejects.toThrow()
+    expect(s.exists('Inbox.md')).toBe(true)
+    expect(s.exists('Work/Inbox.md')).toBe(false)
+    expect(fake.drive.files()['Inbox.md']).toBe('# Inbox')
+    expect(await s.readNote('Inbox.md')).toBe('edited')
+    expect(useRepo.getState().dirty).toEqual({ 'Inbox.md': true })
+  })
+
+  it('keeps an icon change visible while it is being saved', async () => {
+    const s = await newSession()
+    await s.start()
+    fake.drive.write('Home/Other.md', 'x')
+    const icons: (string | undefined)[] = []
+    const unsub = useRepo.subscribe((st) => icons.push(st.metas.Work?.icon))
+    const p = s.applyOptimistic([{ kind: 'write', path: 'Work/_meta.json', content: '{"icon":"star"}' }])
+    await p
+    unsub()
+    // Once the new icon shows, it never flips back to the old one.
+    const first = icons.indexOf('star')
+    expect(first).toBeGreaterThanOrEqual(0)
+    expect(icons.slice(first).every((i) => i === 'star')).toBe(true)
+    expect(useRepo.getState().metas.Work?.icon).toBe('star')
+  })
+
   it('imports files with progress', async () => {
     const s = await newSession()
     await s.start()

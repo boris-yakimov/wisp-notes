@@ -7,8 +7,16 @@ import { RemoteTree, type Entry } from '../drive/remoteTree.ts'
 import { applyOpsToEntries, executeOps, type DriveOp, type ExecResult } from './apply.ts'
 import { AutoSaver, type SaveStatus } from './autosave.ts'
 import { importOp, MAX_PASTED_IMAGE, pastedImage, pastedImageExt, type ImportFile } from './ops.ts'
-import { dirname, isMetaPath, isNotePath } from './paths.ts'
+import { dirname, isInside, isMetaPath, isNotePath } from './paths.ts'
 import { parseMeta, type FolderMeta } from './tree.ts'
+
+/** Save a draft, with a conflict check against the content it was based on. */
+const draftWrite = (d: Draft): DriveOp => ({
+  kind: 'write',
+  path: d.path,
+  content: d.content,
+  base: d.baseHash,
+})
 
 export interface Notice {
   id: number
@@ -80,6 +88,11 @@ export class RepoSession {
   readonly saver: AutoSaver
   /** Last state confirmed by Drive. */
   private remote: RemoteTree | null = null
+  /**
+   * Optimistic operations not yet confirmed by Drive. Always shown on top of `remote`, so syncs that
+   * run while they are in flight don't make the tree jump back to the old state.
+   */
+  private pending: DriveOp[][] = []
   /** Currently displayed entries by path. */
   private shown = new Map<string, Entry>()
   private drafts = new Map<string, Draft>()
@@ -211,12 +224,15 @@ export class RepoSession {
 
   private async setRemote(tree: RemoteTree, persist: boolean): Promise<void> {
     this.remote = tree
-    this.show(tree.entries())
+    this.show()
     if (persist) await this.cache.putSnapshot(this.repoKey, tree.toState())
     await this.loadMetas()
   }
 
-  private show(entries: Entry[]) {
+  /** Display the remote state plus pending optimistic operations. */
+  private show() {
+    const remote = this.remote?.entries() ?? []
+    const entries = this.pending.length ? applyOpsToEntries(remote, this.pending.flat()) : remote
     this.shown = new Map(entries.map((e) => [e.path, e]))
     useRepo.setState({ snapshot: { entries } })
     this.emit()
@@ -402,17 +418,25 @@ export class RepoSession {
 
   /** Save all drafts to Drive in one batch. Used by the auto-saver. */
   async flushDrafts(): Promise<{ remaining: number }> {
-    const batch = [...this.drafts.values()]
-    if (batch.length === 0) return { remaining: 0 }
-    const ops: DriveOp[] = batch.map((d) => ({
-      kind: 'write',
-      path: d.path,
-      content: d.content,
-      base: d.baseHash,
-    }))
-    const result = await this.run(ops)
+    if (this.drafts.size === 0) return { remaining: 0 }
+    // The batch is taken when the save actually runs (in the queue), after earlier operations such
+    // as a move, which may have saved or relocated some drafts already.
+    let batch: Draft[] = []
+    const result = await this.run(() => {
+      batch = [...this.drafts.values()]
+      return batch.map(draftWrite)
+    })
+    await this.settleDrafts(batch, result)
+    this.emit()
+    if (result.error) throw result.error
+    return { remaining: this.drafts.size }
+  }
+
+  /** After drafts were written: clear the saved ones, rebase those edited while saving, report conflicts. */
+  private async settleDrafts(batch: Draft[], result: ExecResult): Promise<void> {
     const saved = new Set(result.saved)
-    const conflicted = new Set(result.conflicts.map((c) => c.path))
+    const conflicts = result.conflicts.filter((c) => batch.some((d) => d.path === c.path))
+    const conflicted = new Set(conflicts.map((c) => c.path))
     for (const d of batch) {
       const current = this.drafts.get(d.path)
       if (!current || !saved.has(d.path)) continue
@@ -424,19 +448,9 @@ export class RepoSession {
         await this.cache.putDraft(current)
       }
     }
-    for (const c of result.conflicts) {
+    for (const c of conflicts) {
       notify(`"${c.path}" was changed on another device. Your version was saved as "${c.copyPath}".`, 'error')
     }
-    this.emit()
-    if (result.error) throw result.error
-    return { remaining: this.drafts.size }
-  }
-
-  /** Save pending drafts now; throws if some remain unsaved (e.g. offline). */
-  async flushPending(): Promise<void> {
-    if (this.drafts.size === 0) return
-    await this.saver.saveNow()
-    if (this.drafts.size > 0) throw new Error(this.saver.lastError ?? 'Unsaved changes could not be saved.')
   }
 
   // ---------------------------------------------------------------- writing
@@ -444,51 +458,79 @@ export class RepoSession {
   /**
    * Serialized: fetch the latest Drive state, then execute ops on it. Partial progress is kept
    * (remote state reflects what succeeded); the first failure is returned in `result.error`.
+   * `ops` may be a function, called right before execution (inside the queue). `overlay` is the
+   * optimistic batch these ops confirm: it stays displayed until the result is shown.
    */
   run(
-    ops: DriveOp[],
-    opts: { onProgress?: (done: number, total: number) => void } = {},
+    ops: DriveOp[] | (() => DriveOp[]),
+    opts: { onProgress?: (done: number, total: number) => void; overlay?: DriveOp[] } = {},
   ): Promise<ExecResult> {
     return this.enqueue(async () => {
+      const settle = () => {
+        if (opts.overlay) this.pending = this.pending.filter((p) => p !== opts.overlay)
+      }
+      let tree: RemoteTree
+      let result: ExecResult
       try {
-        await this.pull()
+        try {
+          await this.pull()
+        } catch (e) {
+          this.noteError(e)
+          throw e
+        }
+        const list = typeof ops === 'function' ? ops() : ops
+        tree = this.remote!.clone()
+        result = list.length
+          ? await executeOps(this.client, tree, list, { now: this.now, onProgress: opts.onProgress })
+          : { conflicts: [], written: [], saved: [] }
+        if (result.error) this.noteError(result.error)
+        else useRepo.setState({ online: true, authRequired: false })
+        await Promise.all(result.written.map((w) => this.cache.putBlob(w.md5, w.content)))
+        for (const w of result.written) this.savedContent.set(w.path, w.content)
       } catch (e) {
-        this.noteError(e)
+        settle()
+        if (this.remote) await this.setRemote(this.remote, false) // roll back the optimistic view
         throw e
       }
-      const tree = this.remote!.clone()
-      const result = await executeOps(this.client, tree, ops, { now: this.now, onProgress: opts.onProgress })
-      if (result.error) this.noteError(result.error)
-      else useRepo.setState({ online: true, authRequired: false })
-      await Promise.all(result.written.map((w) => this.cache.putBlob(w.md5, w.content)))
-      for (const w of result.written) this.savedContent.set(w.path, w.content)
+      settle()
       await this.setRemote(tree, true)
       return result
     })
   }
 
   /**
-   * Structural change (create/rename/delete/icon) with optimistic UI: the tree updates immediately
-   * and rolls back to the real Drive state if the operation fails.
+   * Structural change (create/rename/move/delete/icon) with optimistic UI: the tree updates
+   * immediately, Drive is updated in the background, and the view rolls back to the real Drive
+   * state if the operation fails. Unsaved edits of notes being moved or deleted are saved in the
+   * same batch, right before the move/delete, so the operation never waits for a separate save.
    */
   async applyOptimistic(ops: DriveOp[], onApplied?: () => void): Promise<ExecResult> {
-    const view = useRepo.getState().snapshot
-    if (view) {
-      for (const op of ops) {
-        if (op.kind === 'write' && typeof op.content === 'string') {
-          await this.cache.putBlob(md5Hex(op.content), op.content)
-        }
+    const affected = (d: Draft) =>
+      ops.some((o) => (o.kind === 'rename' || o.kind === 'trash') && isInside(d.path, o.path))
+    const overlay = [...[...this.drafts.values()].filter(affected).map(draftWrite), ...ops]
+    for (const op of overlay) {
+      if (op.kind === 'write' && typeof op.content === 'string') {
+        await this.cache.putBlob(md5Hex(op.content), op.content)
       }
-      this.show(applyOpsToEntries(view.entries, ops))
+    }
+    if (this.remote) {
+      this.pending.push(overlay)
+      this.show()
       if (ops.some((o) => isMetaPath(o.path))) await this.loadMetas()
     }
     onApplied?.()
-    let result: ExecResult
-    try {
-      result = await this.run(ops)
-    } catch (e) {
-      if (this.remote) await this.setRemote(this.remote, false)
-      throw e
+    let batch: Draft[] = []
+    const result = await this.run(
+      () => {
+        // Taken when the batch runs: an earlier save may have stored some of these drafts already.
+        batch = [...this.drafts.values()].filter(affected)
+        return [...batch.map(draftWrite), ...ops]
+      },
+      { overlay },
+    )
+    if (batch.length) {
+      await this.settleDrafts(batch, result)
+      this.emit()
     }
     if (result.error) throw result.error
     return result

@@ -40,8 +40,12 @@ the app only sees files it created or imported.
    changes, then uploads in parallel (4 at a time). Partial failures keep the remaining drafts for retry.
 4. **Conflicts**: each draft remembers the MD5 it was based on. If Drive's current MD5 differs (and the file isn't
    empty), ours is written as `Name (conflict YYYY-MM-DD).md` and the user is notified. A note deleted elsewhere is recreated.
-5. **Structural ops** (`useTreeActions`): build ops (`ops.ts`) → flush affected drafts → `applyOptimistic`
-   (tree updates at once, rolls back on failure). Folder rename/move is one Drive update; delete moves to Drive trash.
+5. **Structural ops** (`useTreeActions`): build ops (`ops.ts`) → `applyOptimistic`: the batch is kept as a pending
+   overlay that is drawn on top of the remote state until Drive confirms it (so syncs in between never show the old
+   state), and runs in the background; on failure the overlay is dropped (rollback). Unsaved edits of notes being
+   moved/deleted are written in the same batch, right before the move/delete (taken inside the queue, so an earlier
+   save never races it); if that write fails, the move isn't run. The changes feed never replaces an item with an
+   older Drive `version`. Folder rename/move is one Drive update; delete moves to Drive trash.
    Moving: drag a note/folder onto a folder (onto a note → nested as its sub-note, empty space → top level) in `Sidebar.tsx`,
    or use "Move to…" in the context menu (keyboard/touch). Both call `moveOp`.
 6. **Import**: picked files keep their relative structure under the target folder; text files are uploaded as
