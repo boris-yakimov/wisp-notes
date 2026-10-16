@@ -1,8 +1,9 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
+import { logosPlugin } from './logosPlugin.ts'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), logosPlugin()],
   test: {
     environment: 'jsdom',
     globals: true,

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { suggestIcon } from '../repo/autoIcons.ts'
+import { logoOf } from './logos.ts'
 import {
   childFolderOf,
   displayPath,
@@ -240,7 +241,7 @@ export function useTreeActions() {
         items: suggestions.map((s) => ({
           icon: s.icon,
           label: displayPath((scope ? s.path.slice(scope.length + 1) : s.path).replace(/\.md$/i, '')),
-          detail: s.icon,
+          detail: logoOf(s.icon)?.label ?? s.icon,
         })),
         confirmLabel: 'Set icons',
       })

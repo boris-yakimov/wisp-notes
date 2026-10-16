@@ -2,6 +2,8 @@ import { DynamicIcon, iconNames, type IconName } from 'lucide-react/dynamic'
 import { useMemo, useRef, useState } from 'react'
 import { IconUploadError, imageFileToIcon, isCustomIcon } from './customIcon.ts'
 import { filterIcons } from './iconSearch.ts'
+import { FolderIcon } from './FolderIcon.tsx'
+import { filterLogos, logoOf } from './logos.ts'
 
 interface Props {
   current: string | undefined
@@ -10,10 +12,17 @@ interface Props {
   onCancel: () => void
 }
 
-/** Searchable grid of Lucide icons. Lazy-loaded (see DialogHost); each icon loads as its own tiny chunk. */
+/**
+ * Searchable grid of Lucide icons or colorful brand logos. Lazy-loaded (see DialogHost); each icon
+ * loads as its own tiny chunk (logos as SVG files).
+ */
 export default function IconPicker({ current, onPick, onCancel }: Props) {
+  const [tab, setTab] = useState<'icons' | 'logos'>(logoOf(current) ? 'logos' : 'icons')
   const [query, setQuery] = useState('')
-  const matches = useMemo(() => filterIcons(iconNames, query), [query])
+  const matches = useMemo(
+    () => (tab === 'logos' ? filterLogos(query) : filterIcons(iconNames, query)),
+    [tab, query],
+  )
   const fileInput = useRef<HTMLInputElement>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -33,11 +42,36 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
 
   return (
     <div>
+      <div role="tablist" aria-label="Icon type" className="mb-3 flex gap-1">
+        {(
+          [
+            ['icons', 'Icons'],
+            ['logos', 'Logos'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={tab === value}
+            onClick={() => setTab(value)}
+            className={`rounded px-3 py-1 text-sm ${
+              tab === value
+                ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200'
+                : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <input
         type="search"
         autoFocus
         aria-label="Search icons"
-        placeholder="Search icons (e.g. book, home, star)…"
+        placeholder={
+          tab === 'logos' ? 'Search logos (e.g. aws, kubernetes)…' : 'Search icons (e.g. book, home, star)…'
+        }
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
@@ -49,28 +83,35 @@ export default function IconPicker({ current, onPick, onCancel }: Props) {
         className="mb-3 w-full rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
       />
       <div role="listbox" aria-label="Icons" className="grid max-h-72 grid-cols-8 gap-1 overflow-y-auto">
-        {matches.map((name) => (
-          <button
-            key={name}
-            type="button"
-            role="option"
-            aria-selected={name === current}
-            aria-label={name}
-            title={name}
-            onClick={() => onPick(name)}
-            className={`flex aspect-square items-center justify-center rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
-              name === current
-                ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200'
-                : 'text-neutral-700 dark:text-neutral-300'
-            }`}
-          >
-            <DynamicIcon name={name as IconName} size={18} />
-          </button>
-        ))}
+        {matches.map((name) => {
+          const label = logoOf(name)?.label ?? name
+          return (
+            <button
+              key={name}
+              type="button"
+              role="option"
+              aria-selected={name === current}
+              aria-label={label}
+              title={label}
+              onClick={() => onPick(name)}
+              className={`flex aspect-square items-center justify-center rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+                name === current
+                  ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200'
+                  : 'text-neutral-700 dark:text-neutral-300'
+              }`}
+            >
+              {tab === 'logos' ? (
+                <FolderIcon name={name} size={22} />
+              ) : (
+                <DynamicIcon name={name as IconName} size={18} />
+              )}
+            </button>
+          )
+        })}
       </div>
       {matches.length === 0 && (
         <p className="py-4 text-center text-sm text-neutral-500 dark:text-neutral-400">
-          No icons match “{query}”.
+          No {tab} match “{query}”.
         </p>
       )}
       <input

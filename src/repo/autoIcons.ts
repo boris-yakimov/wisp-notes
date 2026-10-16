@@ -1,7 +1,10 @@
+import { LOGO_LIST, LOGO_PREFIX } from '../components/logoList.ts'
+
 /**
- * Icon suggestions from note/folder titles: keyword rules for DevOps and general dev topics.
- * Icons are Lucide names (validated against the Lucide list in the unit test). First matching rule wins,
- * so specific tools come before generic words.
+ * Icon suggestions from note/folder titles: a tool's colorful logo if its name appears (`LOGO_LIST`
+ * keywords), else keyword rules for DevOps and general dev topics. Rule icons are Lucide names
+ * (validated against the Lucide list in the unit test). First matching rule wins, so specific tools
+ * come before generic words.
  */
 const RULES: [icon: string, keywords: string[]][] = [
   // Containers & orchestration
@@ -232,9 +235,10 @@ function normalize(title: string): string {
 const has = (norm: string, kw: string) =>
   norm.includes(` ${kw} `) || norm.includes(` ${kw}s `) || norm.includes(` ${kw}es `)
 
-/** Lucide icon name for a note/folder title, or undefined if nothing fits. */
+/** Icon (`logo:<id>` or a Lucide name) for a note/folder title, or undefined if nothing fits. */
 export function suggestIcon(title: string): string | undefined {
   const norm = normalize(title)
+  for (const logo of LOGO_LIST) if (logo.keywords.some((k) => has(norm, k))) return LOGO_PREFIX + logo.id
   for (const [icon, keywords] of RULES) if (keywords.some((k) => has(norm, k))) return icon
   return undefined
 }

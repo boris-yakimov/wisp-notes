@@ -279,6 +279,44 @@ describe('folder icon picker (T11)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Remove icon' }))
     await waitFor(() => expect(fake.drive.files()['Work/_meta.json']).toBe('{}\n'))
   })
+
+  it('picks a colorful logo from the Logos tab', async () => {
+    renderApp('/')
+    const menu = await openMenu('Work', 'button')
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Change icon' }))
+    await userEvent.click(await screen.findByRole('tab', { name: 'Logos' }))
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search icons' }), 'kube')
+    const options = within(screen.getByRole('listbox', { name: 'Icons' })).getAllByRole('option')
+    expect(options[0]).toHaveAccessibleName('Kubernetes')
+    await userEvent.click(options[0]!)
+    await waitFor(() =>
+      expect(JSON.parse(fake.drive.files()['Work/_meta.json']!)).toEqual({ icon: 'logo:kubernetes' }),
+    )
+    await waitFor(() => {
+      const img = screen
+        .getByRole('treeitem', { name: 'Work' })
+        .querySelector('img[data-icon="logo:kubernetes"]')
+      expect(img).not.toBeNull()
+      expect(img!.getAttribute('src')).toContain('kubernetes')
+    })
+  })
+
+  it('marks dark logos so dark themes can invert them, and ignores unknown logos', async () => {
+    fake.drive.write(
+      '_meta.json',
+      JSON.stringify({ icon: 'x', notes: { 'Inbox.md': 'logo:github', 'Ideas.md': 'logo:nope' } }),
+    )
+    fake.drive.write('Ideas.md', 'i')
+    renderApp('/')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('treeitem', { name: 'Inbox' }).querySelector('img[data-logo-dark]'),
+      ).not.toBeNull(),
+    )
+    const ideas = screen.getByRole('treeitem', { name: 'Ideas' })
+    expect(ideas.querySelector('img')).toBeNull()
+    expect(ideas.querySelector('svg[data-icon]')).toHaveAttribute('data-icon', 'note')
+  })
 })
 
 describe('uploaded icons', () => {
@@ -358,11 +396,11 @@ describe('auto-assign icons', () => {
       within(within(dialog).getByRole('list', { name: 'Changes' }))
         .getAllByRole('listitem')
         .map((li) => li.textContent),
-    ).toEqual(['Dockercontainer'])
+    ).toEqual(['DockerDocker'])
     await userEvent.click(within(dialog).getByRole('button', { name: 'Set icons' }))
     await waitFor(() =>
       expect(JSON.parse(fake.drive.files()['DevOps/_meta.json']!)).toEqual({
-        notes: { 'Kubernetes.md': 'star', 'Docker.md': 'container' },
+        notes: { 'Kubernetes.md': 'star', 'Docker.md': 'logo:docker' },
       }),
     )
     expect(await screen.findByText('Set 1 icon.')).toBeInTheDocument()

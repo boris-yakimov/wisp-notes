@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
+import { inlineLimit, logosPlugin } from './logosPlugin.ts'
 
 /**
  * Strict Content Security Policy, injected only into production builds
@@ -37,5 +38,6 @@ function cspPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cspPlugin()],
+  plugins: [react(), tailwindcss(), cspPlugin(), logosPlugin()],
+  build: { assetsInlineLimit: inlineLimit },
 })

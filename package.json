@@ -35,6 +35,7 @@
     "@lezer/markdown": "1.8.0",
     "@replit/codemirror-vim": "6.4.0",
     "codemirror": "6.0.2",
+    "devicon": "2.17.0",
     "idb": "8.0.4",
     "lucide-react": "1.55.0",
     "minisearch": "7.2.0",

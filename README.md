@@ -43,9 +43,10 @@ npm ci
 - **Sub-notes**, like Notion pages: use **+** on a note row (or **New sub-note** in its menu), or drag a note onto
   another note. Sub-notes of `Plan.md` live in a `Plan/` folder next to it, the same layout as a Notion export, so
   imported Notion pages show up nested. A note with sub-notes lists them as links in a strip above its text.
-- **Icons**: **Change icon** in a folder's or note's menu, then pick one or **Upload image…** your own.
-  **Auto-assign icons** on a folder guesses icons from names (Docker, Kubernetes, AWS, …) for everything inside that
-  has none yet, shows them, and saves after you confirm.
+- **Icons**: **Change icon** in a folder's or note's menu, then pick one, switch to **Logos** for colorful logos
+  (AWS, Google Cloud, Kubernetes, Docker, Terraform, …), or **Upload image…** your own.
+  **Auto-assign icons** on a folder guesses icons from names (a tool's logo where there is one, e.g. Docker,
+  Kubernetes, AWS) for everything inside that has none yet, shows them, and saves after you confirm.
 - **Saving**: edits are stored on the device immediately and saved to Drive once a minute, on `:w` / `Ctrl/Cmd+S`,
   before renames/moves/deletes, and when you close the tab.
 - **Shortcuts**: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+click` a link to open it (links to

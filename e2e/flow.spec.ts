@@ -219,6 +219,26 @@ test('upload an image as a note icon', async ({ page, drive }) => {
     .toMatch(/^data:image\/png;base64,/)
 })
 
+test('pick a colorful logo as a note icon', async ({ page, drive }) => {
+  await signedIn(page, false)
+  await page.goto('/')
+  const nav = await ensureSidebar(page)
+  await nav.getByRole('button', { name: 'Actions for Inbox' }).click()
+  await page.getByRole('menuitem', { name: 'Change icon' }).click()
+  await page.getByRole('tab', { name: 'Logos' }).click()
+  const grid = page.getByRole('listbox', { name: 'Icons' })
+  // Every logo in the grid is a real, loadable image (served from the build, allowed by the CSP).
+  await expect(grid.getByRole('option', { name: 'AWS' }).locator('img')).toBeVisible()
+  await page.getByRole('searchbox', { name: 'Search icons' }).fill('kubernetes')
+  await grid.getByRole('option', { name: 'Kubernetes' }).click()
+  const img = nav.getByRole('treeitem', { name: 'Inbox' }).locator('img[data-icon="logo:kubernetes"]')
+  await expect(img).toBeVisible()
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0)
+  await expect
+    .poll(() => JSON.parse(drive.files()['_meta.json'] ?? '{}').notes?.['Inbox.md'] as string | undefined)
+    .toBe('logo:kubernetes')
+})
+
 test('Ctrl+click opens links: notes in the app, websites in a new tab', async ({ page, drive, isMobile }) => {
   test.skip(isMobile, 'Ctrl+click needs a mouse and keyboard')
   drive.write(

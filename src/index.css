@@ -192,3 +192,8 @@ body {
   @apply bg-white text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
   font-family: var(--app-font);
 }
+
+/* Dark brand logos (GitHub, Vercel, …): flip lightness, keep hues, so they show on dark backgrounds. */
+:root.dark img[data-logo-dark] {
+  filter: invert(1) hue-rotate(180deg);
+}
