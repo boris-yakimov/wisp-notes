@@ -198,3 +198,29 @@ describe('App: paste an image', () => {
     created.mockRestore()
   })
 })
+
+describe('App: reopening a note', () => {
+  it('returns to where you were in the note', async () => {
+    renderApp('/n/Work/Plan.md', { vim: false })
+    await waitFor(() => expect(editorText()).toBe('The plan'))
+    act(() => getEditorView().dispatch({ selection: { anchor: 4, head: 8 } }))
+    await userEvent.click(screen.getByRole('link', { name: 'Inbox' }))
+    await waitFor(() => expect(editorText()).toContain('Café'))
+    expect(getEditorView().state.selection.main.head).toBe(0) // never opened before: top
+    await userEvent.click(screen.getByRole('link', { name: 'Plan' }))
+    await waitFor(() => expect(editorText()).toBe('The plan'))
+    const sel = getEditorView().state.selection.main
+    expect([sel.anchor, sel.head]).toEqual([4, 8])
+  })
+
+  it('saves the position when the tab is closed', async () => {
+    renderApp('/n/Inbox.md', { vim: false })
+    await waitFor(() => expect(editorText()).toContain('Café'))
+    act(() => getEditorView().dispatch({ selection: { anchor: 3 } }))
+    window.dispatchEvent(new Event('pagehide'))
+    expect(JSON.parse(localStorage.getItem('wisp-notes:positions')!)['Inbox.md']).toMatchObject({
+      anchor: 3,
+      head: 3,
+    })
+  })
+})

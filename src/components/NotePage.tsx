@@ -2,6 +2,7 @@ import { AlertCircle, Loader2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import type { EditorHandle } from '../editor/Editor.tsx'
+import { loadPosition, savePosition, type ViewPosition } from '../editor/positions.ts'
 
 // CodeMirror is the largest dependency: load it on demand, so the tree renders instantly.
 const Editor = lazy(() => import('../editor/Editor.tsx').then((m) => ({ default: m.Editor })))
@@ -85,6 +86,9 @@ function NoteView({ path }: { path: string }) {
     const i = load.content.toLowerCase().indexOf(highlight.toLowerCase())
     return i >= 0 ? { from: i, to: i + highlight.length } : undefined
   }, [load, highlight])
+  // Reopen where you left off (read once per note; NoteView remounts per path).
+  const [initialPosition] = useState(() => loadPosition(path))
+  const onPosition = useCallback((pos: ViewPosition) => savePosition(path, pos), [path])
 
   const onChange = useCallback((text: string) => void session.editNote(path, text), [session, path])
   const onSave = useCallback(() => void session.saver.saveNow(), [session])
@@ -162,6 +166,8 @@ function NoteView({ path }: { path: string }) {
             readOnly={!exists}
             autoFocus
             initialSelection={initialSelection}
+            initialPosition={initialPosition}
+            onPosition={onPosition}
           />
         </Suspense>
       </div>

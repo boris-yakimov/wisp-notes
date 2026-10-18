@@ -11,6 +11,7 @@ import { textColors } from './colors.ts'
 import { inlineImages, type ImageResolver } from './images.ts'
 import { linkClick } from './links.ts'
 import { livePreview } from './livePreview.ts'
+import type { ViewPosition } from './positions.ts'
 import { tablePreview } from './tables.ts'
 import { editorTheme, markdownHighlight } from './theme.ts'
 
@@ -45,6 +46,18 @@ export interface EditorProps {
   autoFocus?: boolean
   /** Selected and scrolled into view on mount (search match). */
   initialSelection?: { from: number; to: number }
+  /** Cursor and scroll position to restore on mount (ignored when `initialSelection` is set). */
+  initialPosition?: ViewPosition
+  /** Current cursor/scroll position, reported when the editor closes or the tab is hidden. */
+  onPosition?: (pos: ViewPosition) => void
+}
+
+/** The editor's cursor and the line at the top of its viewport. */
+function currentPosition(view: EditorView): ViewPosition {
+  const { anchor, head } = view.state.selection.main
+  const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop
+  const block = view.lineBlockAtHeight(Math.max(0, height))
+  return { anchor, head, top: block.from, topOffset: Math.max(0, height - block.top) }
 }
 
 /** onSave handler per view, so the global `:w` ex command can find the right editor. */
@@ -143,6 +156,8 @@ const readOnlyExt = (ro: boolean): Extension => [EditorState.readOnly.of(ro), Ed
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(props, ref) {
   const host = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
+  /** Schedules a position measurement (set once the view exists). */
+  const trackRef = useRef<(() => void) | null>(null)
   const propsRef = useRef(props)
   propsRef.current = props
   const previewRef = useRef<(on: boolean) => Extension>(() => [])
@@ -226,6 +241,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
             autocapitalize: 'sentences',
           }),
           EditorView.updateListener.of((u) => {
+            if (u.selectionSet || u.geometryChanged) trackRef.current?.()
             if (!u.docChanged) return
             if (u.transactions.every((tr) => tr.isUserEvent('remote'))) return
             propsRef.current.onChange?.(u.state.doc.toString())
@@ -242,9 +258,40 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
         selection: { anchor: from, head: Math.min(p.initialSelection.to, len) },
         effects: EditorView.scrollIntoView(from, { y: 'center' }),
       })
+    } else if (p.initialPosition) {
+      // Clamped: the note may have changed (e.g. on another device) since the position was saved.
+      const len = view.state.doc.length
+      const { anchor, head, top, topOffset } = p.initialPosition
+      view.dispatch({
+        selection: { anchor: Math.min(anchor, len), head: Math.min(head, len) },
+        // Put the saved top line back at the top, scrolled past by the same amount.
+        effects: EditorView.scrollIntoView(Math.min(top, len), { y: 'start', yMargin: -topOffset }),
+      })
     }
     if (p.autoFocus) view.focus()
+    // Keep the latest position (measured in CodeMirror's own read phase, so no extra layout work);
+    // by the time React runs this effect's cleanup the editor is already out of the page.
+    let last: ViewPosition | null = null
+    const measureKey = {}
+    const track = () => view.requestMeasure({ key: measureKey, read: (v) => (last = currentPosition(v)) })
+    trackRef.current = track
+    view.scrollDOM.addEventListener('scroll', track, { passive: true })
+    const reportPosition = () => {
+      if (view.dom.isConnected) last = currentPosition(view)
+      if (last) propsRef.current.onPosition?.(last)
+    }
+    // Closing/reloading the tab doesn't unmount React, so also save when the page is hidden.
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') reportPosition()
+    }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', reportPosition)
     return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', reportPosition)
+      view.scrollDOM.removeEventListener('scroll', track)
+      trackRef.current = null
+      reportPosition()
       view.destroy()
       viewRef.current = null
     }

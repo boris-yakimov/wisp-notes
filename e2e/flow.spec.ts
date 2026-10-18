@@ -507,3 +507,36 @@ test('drag the sidebar edge to resize it; the width is remembered', async ({ pag
   await handle.dblclick()
   await expect.poll(async () => Math.round((await nav.boundingBox())!.width)).toBe(Math.round(before))
 })
+
+test('reopening a note returns to where you were, also after a reload', async ({ page, drive }) => {
+  const lines = Array.from({ length: 300 }, (_, i) => `Line ${i + 1} of a long note`)
+  drive.write('Inbox.md', '# Inbox\n\n' + lines.join('\n'))
+  await signedIn(page, false)
+  await page.goto('/n/Inbox.md')
+  const scroller = page.locator('.cm-scroller')
+  await expect(page.locator('.cm-content')).toContainText('Line 1 of')
+  // Scroll down into the middle of the note, put the cursor there.
+  await scroller.evaluate((el) => (el.scrollTop = 3000))
+  const topLine = () =>
+    scroller.evaluate((el) => {
+      const top = el.getBoundingClientRect().top
+      const line = [...el.querySelectorAll('.cm-line')].find(
+        (l) => l.getBoundingClientRect().bottom > top + 1,
+      )
+      return line?.textContent
+    })
+  await expect.poll(topLine).toMatch(/^Line \d+ of/)
+  const before = await topLine()
+  expect(Number(before!.match(/\d+/)![0])).toBeGreaterThan(50)
+  await expect.poll(async () => (await scroller.evaluate((el) => el.scrollTop)) > 2000).toBe(true)
+
+  const nav = await ensureSidebar(page)
+  await nav.getByRole('button', { name: /^Home/ }).click()
+  await nav.getByRole('link', { name: /^Recipes/ }).click()
+  await expect(page.locator('.cm-content')).toContainText('Pancakes')
+  await (await ensureSidebar(page)).getByRole('link', { name: /^Inbox/ }).click()
+  await expect.poll(topLine).toBe(before)
+
+  await page.reload()
+  await expect.poll(topLine).toBe(before)
+})
