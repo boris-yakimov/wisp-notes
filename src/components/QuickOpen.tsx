@@ -1,13 +1,28 @@
 import { Search } from 'lucide-react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router'
 import { dirname, displayPath, notePathToUrl } from '../repo/paths.ts'
 import { listItems, markRuns, searchNames, type NameHit } from '../search/names.ts'
 import { useUi } from '../store/ui.ts'
 import { FolderIcon } from './FolderIcon.tsx'
+import { QuickOpenPreview } from './QuickOpenPreview.tsx'
 import { useTree } from './useTree.ts'
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+const WIDE = '(min-width: 768px)'
+
+/** The preview pane is only shown (and notes only loaded for it) where there is room beside the list. */
+function useWideScreen(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia?.(WIDE)
+      mq?.addEventListener('change', cb)
+      return () => mq?.removeEventListener('change', cb)
+    },
+    () => window.matchMedia?.(WIDE).matches ?? true,
+  )
+}
 
 /** Ctrl/Cmd+K palette: fuzzy search note and folder names, keyboard navigable. */
 export function QuickOpen() {
@@ -41,6 +56,7 @@ function Palette() {
   const listId = useId()
   const listRef = useRef<HTMLUListElement>(null)
   const root = useTree()
+  const wide = useWideScreen()
 
   const results: NameHit[] = useMemo(() => {
     if (query.trim()) return searchNames(root, query, 50)
@@ -111,7 +127,7 @@ function Palette() {
         role="dialog"
         aria-modal="true"
         aria-label="Search notes"
-        className="w-full max-w-xl overflow-hidden rounded-lg bg-white dark:bg-neutral-900 shadow-xl"
+        className="w-full max-w-xl overflow-hidden rounded-lg bg-white dark:bg-neutral-900 shadow-xl md:max-w-5xl"
       >
         <div className="flex items-center gap-2 border-b border-neutral-200 dark:border-neutral-800 px-3">
           <Search size={16} className="shrink-0 text-neutral-400 dark:text-neutral-500" aria-hidden />
@@ -133,49 +149,56 @@ function Palette() {
             className="w-full py-3 text-base outline-none"
           />
         </div>
-        <ul
-          id={listId}
-          ref={listRef}
-          role="listbox"
-          aria-label="Results"
-          className="max-h-[60vh] overflow-y-auto py-1"
-        >
-          {results.map((hit, i) => (
-            <li
-              key={hit.path}
-              id={optionId(i)}
-              data-index={i}
-              data-kind={hit.kind}
-              role="option"
-              aria-selected={i === activeIndex}
-              onMouseMove={() => i !== activeIndex && setActive(i)}
-              onClick={() => choose(hit)}
-              className={`cursor-pointer px-3 py-2 ${i === activeIndex ? 'bg-indigo-50 dark:bg-indigo-950/50' : ''}`}
-            >
-              <div className="flex items-center gap-2">
-                <FolderIcon
-                  name={hit.icon}
-                  note={hit.kind === 'note'}
-                  size={14}
-                  className="shrink-0 text-neutral-400 dark:text-neutral-500"
-                />
-                <span className="truncate text-sm font-medium">
-                  <Marked text={hit.name} indices={hit.nameMatches} />
-                </span>
-                {hit.parent && (
-                  <span className="ml-auto shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-500">
-                    <Marked text={hit.parent} indices={hit.parentMatches} />
+        <div className="flex md:h-[60vh]">
+          <ul
+            id={listId}
+            ref={listRef}
+            role="listbox"
+            aria-label="Results"
+            className="max-h-[60vh] w-full overflow-y-auto py-1 md:max-h-none md:w-2/5 md:shrink-0 md:border-r md:border-neutral-200 md:dark:border-neutral-800"
+          >
+            {results.map((hit, i) => (
+              <li
+                key={hit.path}
+                id={optionId(i)}
+                data-index={i}
+                data-kind={hit.kind}
+                role="option"
+                aria-selected={i === activeIndex}
+                onMouseMove={() => i !== activeIndex && setActive(i)}
+                onClick={() => choose(hit)}
+                className={`cursor-pointer px-3 py-2 ${i === activeIndex ? 'bg-indigo-50 dark:bg-indigo-950/50' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  <FolderIcon
+                    name={hit.icon}
+                    note={hit.kind === 'note'}
+                    size={14}
+                    className="shrink-0 text-neutral-400 dark:text-neutral-500"
+                  />
+                  <span className="truncate text-sm font-medium">
+                    <Marked text={hit.name} indices={hit.nameMatches} />
                   </span>
-                )}
-              </div>
-            </li>
-          ))}
-          {results.length === 0 && (
-            <li className="px-3 py-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-              {query.trim() ? `Nothing matches “${query.trim()}”.` : 'No notes yet.'}
-            </li>
+                  {hit.parent && (
+                    <span className="ml-auto shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-500">
+                      <Marked text={hit.parent} indices={hit.parentMatches} />
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+            {results.length === 0 && (
+              <li className="px-3 py-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                {query.trim() ? `Nothing matches “${query.trim()}”.` : 'No notes yet.'}
+              </li>
+            )}
+          </ul>
+          {wide && (
+            <div className="min-w-0 flex-1">
+              <QuickOpenPreview hit={results[activeIndex]} root={root} />
+            </div>
           )}
-        </ul>
+        </div>
         <div className="hidden gap-3 border-t border-neutral-200 dark:border-neutral-800 px-3 py-1.5 text-xs text-neutral-400 dark:text-neutral-500 sm:flex">
           <span>↑↓ navigate</span>
           <span>↵ open</span>

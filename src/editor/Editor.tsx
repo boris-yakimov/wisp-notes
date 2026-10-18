@@ -44,6 +44,8 @@ export interface EditorProps {
   /** Dark color scheme (CodeMirror's built-in panels/selection; our colors come from CSS variables). */
   dark?: boolean
   readOnly?: boolean
+  /** Accessible name of the text area (default "Note editor"). */
+  ariaLabel?: string
   autoFocus?: boolean
   /** Selected and scrolled into view on mount (search match). */
   initialSelection?: { from: number; to: number }
@@ -247,7 +249,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           c.preview.of(previewExt(p.livePreviewEnabled)),
           c.ro.of(readOnlyExt(!!p.readOnly)),
           EditorView.contentAttributes.of({
-            'aria-label': 'Note editor',
+            'aria-label': p.ariaLabel ?? 'Note editor',
             spellcheck: 'true',
             autocapitalize: 'sentences',
           }),

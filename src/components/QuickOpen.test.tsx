@@ -6,7 +6,8 @@ import { getEditorView, renderApp } from '../test/renderApp.tsx'
 
 setupFakeDrive({
   files: {
-    'Work/Roadmap.md': '# Roadmap\n\nShip the quarterly milestones.',
+    'Work/Roadmap.md':
+      '# Roadmap\n\nShip the <span style="color: green">quarterly</span> milestones.\n\nRun `npm ci` first.',
     'Home/Groceries.md': 'Milk, eggs and a roadmap poster.',
     'Ideas.md': 'Random thoughts',
   },
@@ -103,5 +104,61 @@ describe('quick open', () => {
     const nav = screen.getByRole('navigation', { name: 'Notes' })
     expect(await within(nav).findByRole('link', { name: 'Groceries' })).toBeInTheDocument()
     await waitFor(() => expect(within(nav).getByRole('button', { name: /^Home/ })).toHaveFocus())
+  })
+})
+
+describe('quick open preview', () => {
+  const realMatchMedia = window.matchMedia
+  const wide = (on: boolean) => {
+    window.matchMedia = ((query: string) => ({
+      ...realMatchMedia(query),
+      matches: on && query.includes('min-width'),
+    })) as typeof window.matchMedia
+  }
+  afterEach(() => {
+    window.matchMedia = realMatchMedia
+  })
+  const preview = () => screen.getByRole('region', { name: 'Preview' })
+
+  it('shows the focused note’s content beside the list and follows the selection', async () => {
+    wide(true)
+    renderApp('/')
+    const input = await openPalette()
+    await userEvent.type(input, 'roadmap')
+    await waitFor(() => expect(preview()).toHaveTextContent('Ship the quarterly milestones.'))
+    // Rendered like the editor's live preview, read-only: color tags hidden, styles applied.
+    const view = preview().querySelector('.cm-content')!
+    expect(view).toHaveAttribute('aria-label', 'Note preview')
+    expect(view).toHaveAttribute('contenteditable', 'false')
+    expect(preview()).not.toHaveTextContent('<span')
+    expect(preview().querySelector('.cm-color-green')).toHaveTextContent('quarterly')
+    expect(preview()).not.toHaveTextContent('# Roadmap') // heading marks hidden
+    expect(input).toHaveFocus()
+    await userEvent.clear(input)
+    await userEvent.type(input, 'groc')
+    await waitFor(() => expect(preview()).toHaveTextContent('Milk, eggs and a roadmap poster.'))
+    // Arrow keys move the preview along with the selection
+    await userEvent.clear(input)
+    await waitFor(() => expect(preview()).toHaveTextContent('Milk, eggs')) // empty query: Groceries first
+    await userEvent.keyboard('{ArrowDown}')
+    await waitFor(() => expect(preview()).toHaveTextContent('Random thoughts'))
+  })
+
+  it('lists a folder’s contents', async () => {
+    wide(true)
+    renderApp('/')
+    const input = await openPalette()
+    await userEvent.type(input, 'work')
+    expect(options()[0]).toHaveAttribute('data-kind', 'folder')
+    expect(within(preview()).getByRole('list', { name: 'Contents of Work' })).toHaveTextContent('Roadmap')
+  })
+
+  it('is hidden on narrow screens', async () => {
+    wide(false)
+    renderApp('/')
+    const input = await openPalette()
+    await userEvent.type(input, 'roadmap')
+    expect(names()).toEqual(['Roadmap'])
+    expect(screen.queryByRole('region', { name: 'Preview' })).not.toBeInTheDocument()
   })
 })
