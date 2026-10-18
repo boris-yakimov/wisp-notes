@@ -1,7 +1,7 @@
 import { ChevronRight, MoreHorizontal, Plus } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink } from 'react-router'
-import { childFolderOf, dirname, isInside, notePathToUrl } from '../repo/paths.ts'
+import { NavLink, useLocation } from 'react-router'
+import { childFolderOf, dirname, isInside, notePathToUrl, urlToNotePath } from '../repo/paths.ts'
 import { useRepo } from '../repo/session.ts'
 import { hasChildren, type FolderNode, type NoteNode } from '../repo/tree.ts'
 import { useUi } from '../store/ui.ts'
@@ -150,6 +150,37 @@ function DropLine({ zone }: { zone: Zone | null }) {
   )
 }
 
+/**
+ * Scroll the open note's row into view (centered) when the open note changes, e.g. when the app loads
+ * on a deep link. Waits for the row to exist (tree loading, folders expanding), then leaves the
+ * scrolling to the user. Rows already visible (you just clicked one) don't move.
+ */
+function useRevealActiveNote() {
+  const scroller = useRef<HTMLDivElement>(null)
+  const path = urlToNotePath(useLocation().pathname)
+  const snapshot = useRepo((s) => s.snapshot)
+  const expanded = useUi((s) => s.expanded)
+  const sidebarOpen = useUi((s) => s.sidebarOpen)
+  const revealed = useRef<string | null>(null)
+  useEffect(() => {
+    const box = scroller.current
+    if (!path || !box || !sidebarOpen) return
+    if (revealed.current === path) return
+    const row = [...box.querySelectorAll<HTMLElement>('a[data-path]')].find((a) => a.dataset.path === path)
+    if (!row) return // not rendered yet: try again when the tree or expanded folders change
+    revealed.current = path
+    const b = box.getBoundingClientRect()
+    const r = row.getBoundingClientRect()
+    if (r.top >= b.top && r.bottom <= b.bottom) return
+    box.scrollTop += r.top - b.top - (b.height - r.height) / 2
+  }, [path, snapshot, expanded, sidebarOpen])
+  // Opening the drawer again (phones) reveals the note again.
+  useEffect(() => {
+    if (!sidebarOpen) revealed.current = null
+  }, [sidebarOpen])
+  return scroller
+}
+
 /** Folder tree built from the current snapshot. */
 export function Sidebar({
   onMenu,
@@ -169,11 +200,13 @@ export function Sidebar({
   )
   // Dropping on empty space (or the top-level area) moves to the top level.
   const rootDrop = useDropTarget('', actions)
+  const scrollRef = useRevealActiveNote()
 
   return (
     <div className="flex h-full flex-col">
       {header}
       <div
+        ref={scrollRef}
         className={`min-h-0 flex-1 overflow-y-auto py-1 ${rootDrop.over ? 'bg-indigo-50 dark:bg-indigo-950/50 ring-2 ring-indigo-300 dark:ring-indigo-700 ring-inset' : ''}`}
         data-testid="tree-root"
         {...rootDrop.handlers}

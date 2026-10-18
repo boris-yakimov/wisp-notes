@@ -540,3 +540,18 @@ test('reopening a note returns to where you were, also after a reload', async ({
   await page.reload()
   await expect.poll(topLine).toBe(before)
 })
+
+test('the open note is scrolled into view in the sidebar', async ({ page, drive, isMobile }) => {
+  for (let i = 1; i <= 80; i++) drive.write(`Archive/Note ${String(i).padStart(2, '0')}.md`, `Note ${i}`)
+  await signedIn(page, false)
+  await page.goto('/n/Archive/Note%2075.md')
+  await expect(page.locator('.cm-content')).toContainText('Note 75')
+  const nav = await ensureSidebar(page)
+  await expect(nav.getByRole('link', { name: /^Note 75/ })).toBeInViewport()
+  if (isMobile) return
+  // A reload restores the expanded folders first; the note must still be revealed.
+  await nav.getByTestId('tree-root').evaluate((el) => (el.scrollTop = 0))
+  await page.reload()
+  await expect(page.locator('.cm-content')).toContainText('Note 75')
+  await expect(page.getByRole('link', { name: /^Note 75/ })).toBeInViewport()
+})
