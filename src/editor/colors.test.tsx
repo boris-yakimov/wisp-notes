@@ -1,4 +1,6 @@
+import { cursorCharLeft, cursorCharRight, deleteCharBackward } from '@codemirror/commands'
 import { EditorSelection, EditorState } from '@codemirror/state'
+import { getCM, Vim } from '@replit/codemirror-vim'
 import { render } from '@testing-library/react'
 import { createRef } from 'react'
 import { findColorSpans, stripColors } from '../repo/textColors.ts'
@@ -65,14 +67,15 @@ describe('text colors in the editor', () => {
     expect(document.querySelector('.cm-color-toolbar')).toBeNull() // selection collapsed
   })
 
-  it('colors the text and hides the tags off the cursor line', () => {
+  it('colors the text and hides the tags, also on the cursor line', () => {
     const view = setup(`Pay ${G('the deposit')} today\n\nend`)
     view.dispatch({ selection: { anchor: view.state.doc.length } })
     view.focus()
     expect(document.querySelector('.cm-color-green')).toHaveTextContent('the deposit')
     expect(view.contentDOM.textContent).toContain('Pay the deposit today')
     view.dispatch({ selection: { anchor: 1 } })
-    expect(view.contentDOM.textContent).toContain('<span style="color: green">')
+    expect(view.contentDOM.textContent).toContain('Pay the deposit today')
+    expect(view.contentDOM.textContent).not.toContain('<span')
   })
 
   it('keeps the tags visible without live preview, still colored', () => {
@@ -92,5 +95,87 @@ describe('text colors in the editor', () => {
     view.dispatch({ selection: { anchor: 4, head: view.state.doc.length - 6 } })
     document.querySelector<HTMLButtonElement>('[aria-label="Color text blue"]')!.click()
     expect(view.state.doc.toString()).toBe('Pay <span style="color: blue">the deposit</span> today')
+  })
+})
+
+describe('editing around hidden color tags', () => {
+  const doc = `Pay ${G('the deposit')} today`
+  const open = 4 // "<span …>" starts here
+  const textFrom = open + '<span style="color: green">'.length
+  const textTo = textFrom + 'the deposit'.length
+  const close = textTo + '</span>'.length
+
+  function setup(vimEnabled = false) {
+    const ref = createRef<EditorHandle>()
+    render(<Editor ref={ref} content={doc} vimEnabled={vimEnabled} livePreviewEnabled />)
+    const view = ref.current!.view()!
+    const keys = (ks: string[]) => ks.forEach((k) => Vim.handleKey(getCM(view)!, k, 'user'))
+    const at = (pos: number) => view.dispatch({ selection: { anchor: pos } })
+    const head = () => view.state.selection.main.head
+    const text = () => view.state.doc.toString()
+    return { view, keys, at, head, text }
+  }
+
+  it('moves the cursor over hidden tags in one step', () => {
+    const { view, at, head } = setup()
+    at(open - 1) // before the space
+    cursorCharRight(view)
+    expect(head()).toBe(textFrom) // before "the": no stop inside "<span …>"
+    cursorCharLeft(view)
+    expect(head()).toBe(open - 1) // back over the space
+    at(textTo - 1)
+    cursorCharRight(view)
+    expect(head()).toBe(close) // after "deposit"
+    cursorCharLeft(view)
+    expect(head()).toBe(textTo - 1)
+  })
+
+  it('never leaves the cursor inside a tag (vim motions, clicks, jumps)', () => {
+    const { keys, at, head } = setup(true)
+    at(0)
+    keys(['w']) // to "the"
+    expect(head()).toBe(textFrom)
+    keys(['h'])
+    expect(head()).toBe(open - 1)
+    keys(['l', 'l'])
+    expect(head()).toBe(textFrom + 1)
+    at(textTo + 3) // e.g. a click or search landing inside "</span>"
+    expect(head()).toBe(close)
+  })
+
+  it('Backspace right after colored text deletes its last letter, not the tag', () => {
+    const { view, at, text } = setup()
+    at(close)
+    deleteCharBackward(view)
+    expect(text()).toBe(`Pay ${G('the deposi')} today`)
+  })
+
+  it('Backspace at the start of colored text deletes the character before it', () => {
+    const { view, at, text } = setup()
+    at(textFrom)
+    deleteCharBackward(view)
+    expect(text()).toBe(`Pay${G('the deposit')} today`)
+  })
+
+  it('deleting all the colored text removes its tags too', () => {
+    const { view, text } = setup()
+    view.dispatch({ changes: { from: textFrom, to: textTo }, userEvent: 'delete' })
+    expect(text()).toBe('Pay  today')
+  })
+
+  it('deleting across a tag keeps it whole', () => {
+    const { view, text } = setup()
+    view.dispatch({ changes: { from: 0, to: textFrom + 4 }, userEvent: 'delete' })
+    expect(text()).toBe(G('deposit') + ' today')
+  })
+
+  it('vim x and dw work on the visible text', () => {
+    const { keys, at, text } = setup(true)
+    at(textTo - 1)
+    keys(['x'])
+    expect(text()).toBe(`Pay ${G('the deposi')} today`)
+    at(textFrom)
+    keys(['d', 'w'])
+    expect(text()).toBe(`Pay ${G('deposi')} today`)
   })
 })

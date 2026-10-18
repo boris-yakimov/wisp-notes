@@ -555,3 +555,25 @@ test('the open note is scrolled into view in the sidebar', async ({ page, drive,
   await expect(page.locator('.cm-content')).toContainText('Note 75')
   await expect(page.getByRole('link', { name: /^Note 75/ })).toBeInViewport()
 })
+
+test('color tags stay hidden on the cursor line; arrows and Backspace treat them as invisible', async ({
+  page,
+  drive,
+}) => {
+  drive.write('Inbox.md', 'Pay <span style="color: green">the deposit</span>\nnext')
+  await signedIn(page, false)
+  await page.goto('/n/Inbox.md')
+  const line = page.locator('.cm-line').first()
+  await expect(line).toHaveText('Pay the deposit')
+  await line.click()
+  await expect(line).toHaveText('Pay the deposit') // cursor on the line: tags still hidden
+  await page.keyboard.press('Home')
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight')
+  await page.keyboard.type('X')
+  await page.keyboard.press('End')
+  await page.keyboard.press('Backspace')
+  await page.keyboard.press('Control+s')
+  await expect(page.getByRole('status', { name: 'Save status: Saved' })).toBeVisible({ timeout: 10_000 })
+  expect(drive.files()['Inbox.md']).toBe('Pay <span style="color: green">tXhe deposi</span>\nnext')
+  await expect(page.locator('.cm-color-green')).toHaveText('tXhe deposi')
+})
