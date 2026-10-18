@@ -151,33 +151,46 @@ function DropLine({ zone }: { zone: Zone | null }) {
 }
 
 /**
- * Scroll the open note's row into view (centered) when the open note changes, e.g. when the app loads
- * on a deep link. Waits for the row to exist (tree loading, folders expanding), then leaves the
- * scrolling to the user. Rows already visible (you just clicked one) don't move.
+ * Keep the open note's row in view (centered) after opening a note, e.g. when the app loads on a deep
+ * link: while the tree is still settling (cached tree, then Drive's, then the saved order and icons
+ * from `_meta.json`, folders expanding) the row can move, so it's revealed again after each change.
+ * Stops once you scroll or click in the sidebar yourself. Rows already visible don't move.
  */
 function useRevealActiveNote() {
   const scroller = useRef<HTMLDivElement>(null)
   const path = urlToNotePath(useLocation().pathname)
   const snapshot = useRepo((s) => s.snapshot)
+  const metas = useRepo((s) => s.metas)
   const expanded = useUi((s) => s.expanded)
   const sidebarOpen = useUi((s) => s.sidebarOpen)
-  const revealed = useRef<string | null>(null)
+  /** The sidebar was scrolled/used by hand since this note was opened. */
+  const userMoved = useRef(false)
+  useEffect(() => {
+    userMoved.current = false
+  }, [path, sidebarOpen])
   useEffect(() => {
     const box = scroller.current
-    if (!path || !box || !sidebarOpen) return
-    if (revealed.current === path) return
-    const row = [...box.querySelectorAll<HTMLElement>('a[data-path]')].find((a) => a.dataset.path === path)
-    if (!row) return // not rendered yet: try again when the tree or expanded folders change
-    revealed.current = path
-    const b = box.getBoundingClientRect()
-    const r = row.getBoundingClientRect()
-    if (r.top >= b.top && r.bottom <= b.bottom) return
-    box.scrollTop += r.top - b.top - (b.height - r.height) / 2
-  }, [path, snapshot, expanded, sidebarOpen])
-  // Opening the drawer again (phones) reveals the note again.
+    if (!box) return
+    const stop = () => (userMoved.current = true)
+    const events = ['wheel', 'touchmove', 'pointerdown', 'keydown'] as const
+    for (const e of events) box.addEventListener(e, stop, { passive: true })
+    return () => events.forEach((e) => box.removeEventListener(e, stop))
+  }, [])
   useEffect(() => {
-    if (!sidebarOpen) revealed.current = null
-  }, [sidebarOpen])
+    const box = scroller.current
+    if (!path || !box || !sidebarOpen || userMoved.current) return
+    // After layout of this render (React effects can run before the browser has laid out the rows).
+    const frame = requestAnimationFrame(() => {
+      if (userMoved.current) return
+      const row = [...box.querySelectorAll<HTMLElement>('a[data-path]')].find((a) => a.dataset.path === path)
+      if (!row) return // not rendered yet: tried again when the tree or expanded folders change
+      const b = box.getBoundingClientRect()
+      const r = row.getBoundingClientRect()
+      if (r.top >= b.top && r.bottom <= b.bottom) return
+      box.scrollTop += r.top - b.top - (b.height - r.height) / 2
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [path, snapshot, metas, expanded, sidebarOpen])
   return scroller
 }
 

@@ -7,7 +7,10 @@ import { expect, test } from './fixtures.ts'
 /** On phone-sized viewports the sidebar is a drawer that must be opened first. */
 async function ensureSidebar(page: Page) {
   const nav = page.getByRole('navigation', { name: 'Notes' })
-  if (!(await nav.isVisible())) await page.getByRole('button', { name: 'Toggle sidebar' }).click()
+  // Wait for the app shell first: checking `nav` before it renders would toggle an open sidebar shut.
+  const toggle = page.getByRole('button', { name: 'Toggle sidebar' })
+  await expect(toggle).toBeVisible()
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
   await expect(nav).toBeVisible()
   return nav
 }
@@ -489,7 +492,8 @@ test('color selected text green or red from the toolbar, also in vim visual mode
     )
 })
 
-test('drag the sidebar edge to resize it; the width is remembered', async ({ page, isMobile }) => {
+test('drag the sidebar edge to resize it; the width is remembered', async ({ page, drive, isMobile }) => {
+  void drive // mocks Google Drive and sign-in for this page
   test.skip(isMobile, 'The phone drawer has a fixed width')
   await signedIn(page, false)
   await page.goto('/')
@@ -554,6 +558,29 @@ test('the open note is scrolled into view in the sidebar', async ({ page, drive,
   await page.reload()
   await expect(page.locator('.cm-content')).toContainText('Note 75')
   await expect(page.getByRole('link', { name: /^Note 75/ })).toBeInViewport()
+})
+
+test('the open note stays in view when the saved sidebar order loads after the tree', async ({
+  page,
+  drive,
+}) => {
+  const names = Array.from({ length: 80 }, (_, i) => `Note ${String(i + 1).padStart(2, '0')}.md`)
+  for (const n of names) drive.write(`Archive/${n}`, n)
+  // Custom order (drag-and-drop): Note 01 last. It's loaded after the alphabetical tree is shown.
+  drive.write('Archive/_meta.json', JSON.stringify({ order: [...names.slice(1), names[0]] }))
+  await signedIn(page, false)
+  await page.goto('/n/Archive/Note%2001.md')
+  const nav = await ensureSidebar(page)
+  await expect(
+    nav.getByRole('treeitem', { name: 'Archive' }).getByRole('treeitem').last(),
+  ).toHaveAccessibleName('Note 01')
+  await expect(nav.getByRole('link', { name: /^Note 01/ })).toBeInViewport()
+  await page.reload() // from the device cache this time
+  await ensureSidebar(page)
+  await expect(
+    nav.getByRole('treeitem', { name: 'Archive' }).getByRole('treeitem').last(),
+  ).toHaveAccessibleName('Note 01')
+  await expect(nav.getByRole('link', { name: /^Note 01/ })).toBeInViewport()
 })
 
 test('color tags stay hidden on the cursor line; arrows and Backspace treat them as invisible', async ({
