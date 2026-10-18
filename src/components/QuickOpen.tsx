@@ -1,23 +1,38 @@
-import { FileText, Search } from 'lucide-react'
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Search } from 'lucide-react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { dirname, displayPath, isNotePath, noteTitle, notePathToUrl } from '../repo/paths.ts'
-import { useRepo } from '../repo/session.ts'
-import { highlightParts, type SearchHit } from '../search/index.ts'
-import type { SearchService } from '../search/service.ts'
+import { dirname, displayPath, notePathToUrl } from '../repo/paths.ts'
+import { listItems, markRuns, searchNames, type NameHit } from '../search/names.ts'
 import { useUi } from '../store/ui.ts'
-import type { NoteNavState } from './NotePage.tsx'
+import { FolderIcon } from './FolderIcon.tsx'
+import { useTree } from './useTree.ts'
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
-/** Ctrl/Cmd+K palette: search note titles and contents, keyboard navigable. */
-export function QuickOpen({ search }: { search: SearchService }) {
+/** Ctrl/Cmd+K palette: fuzzy search note and folder names, keyboard navigable. */
+export function QuickOpen() {
   const open = useUi((s) => s.quickOpen)
   if (!open) return null
-  return <Palette search={search} />
+  return <Palette />
 }
 
-function Palette({ search }: { search: SearchService }) {
+/** Expand a folder (and its parents) in the sidebar, open the sidebar and focus the folder's row. */
+function revealFolder(path: string) {
+  const ui = useUi.getState()
+  ui.expandTo(path)
+  ui.setExpanded(path, true)
+  ui.setSidebarOpen(true)
+  // After the sidebar has rendered the (newly expanded) row.
+  requestAnimationFrame(() => {
+    const row = [...document.querySelectorAll<HTMLElement>('button[data-path]')].find(
+      (b) => b.dataset.path === path,
+    )
+    row?.scrollIntoView?.({ block: 'center' })
+    row?.focus()
+  })
+}
+
+function Palette() {
   const setOpen = useUi((s) => s.setQuickOpen)
   const closeSidebarOnMobile = useUi((s) => s.closeSidebarOnMobile)
   const navigate = useNavigate()
@@ -25,22 +40,26 @@ function Palette({ search }: { search: SearchService }) {
   const [active, setActive] = useState(0)
   const listId = useId()
   const listRef = useRef<HTMLUListElement>(null)
-  const snapshot = useRepo((s) => s.snapshot)
-  // Re-render when the index changes (background prefetch finishing, edits).
-  const indexVersion = useSyncExternalStore(
-    (cb) => search.onChange(cb),
-    () => search.version,
-  )
+  const root = useTree()
 
-  const results: SearchHit[] = useMemo(() => {
-    if (query.trim()) return search.index.search(query, 50)
+  const results: NameHit[] = useMemo(() => {
+    if (query.trim()) return searchNames(root, query, 50)
     // Empty query: all notes alphabetically.
-    return (snapshot?.entries ?? [])
-      .filter((e) => isNotePath(e.path))
-      .map((e) => ({ path: e.path, title: noteTitle(e.path), score: 0, terms: [], snippet: null }))
-      .sort((a, b) => collator.compare(a.title, b.title))
+    return listItems(root)
+      .filter((n) => n.kind === 'note')
+      .map((n) => ({
+        kind: n.kind,
+        path: n.path,
+        name: n.name,
+        icon: n.icon,
+        parent: displayPath(dirname(n.path)),
+        score: 0,
+        nameMatches: [],
+        parentMatches: [],
+      }))
+      .sort((a, b) => collator.compare(a.name, b.name))
       .slice(0, 50)
-  }, [query, search, snapshot, indexVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [query, root])
 
   const activeIndex = Math.min(active, Math.max(0, results.length - 1))
 
@@ -49,14 +68,15 @@ function Palette({ search }: { search: SearchService }) {
   }, [activeIndex])
 
   const close = () => setOpen(false)
-  const choose = (hit: SearchHit | undefined) => {
+  const choose = (hit: NameHit | undefined) => {
     if (!hit) return
     close()
+    if (hit.kind === 'folder') {
+      revealFolder(hit.path)
+      return
+    }
     closeSidebarOnMobile()
-    const highlight = hit.snippet
-      ? hit.snippet.text.slice(hit.snippet.matchStart, hit.snippet.matchEnd)
-      : undefined
-    navigate(notePathToUrl(hit.path), { state: { highlight } satisfies NoteNavState })
+    navigate(notePathToUrl(hit.path))
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -78,9 +98,6 @@ function Palette({ search }: { search: SearchService }) {
     }
   }
 
-  const terms = query.trim()
-    ? [...new Set(results.flatMap((r) => r.terms).concat(query.trim().split(/\s+/)))]
-    : []
   const optionId = (i: number) => `${listId}-opt-${i}`
 
   return (
@@ -106,7 +123,7 @@ function Palette({ search }: { search: SearchService }) {
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={results.length ? optionId(activeIndex) : undefined}
-            placeholder="Search notes…"
+            placeholder="Search pages and folders…"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
@@ -128,6 +145,7 @@ function Palette({ search }: { search: SearchService }) {
               key={hit.path}
               id={optionId(i)}
               data-index={i}
+              data-kind={hit.kind}
               role="option"
               aria-selected={i === activeIndex}
               onMouseMove={() => i !== activeIndex && setActive(i)}
@@ -135,33 +153,26 @@ function Palette({ search }: { search: SearchService }) {
               className={`cursor-pointer px-3 py-2 ${i === activeIndex ? 'bg-indigo-50 dark:bg-indigo-950/50' : ''}`}
             >
               <div className="flex items-center gap-2">
-                <FileText size={14} className="shrink-0 text-neutral-400 dark:text-neutral-500" aria-hidden />
+                <FolderIcon
+                  name={hit.icon}
+                  note={hit.kind === 'note'}
+                  size={14}
+                  className="shrink-0 text-neutral-400 dark:text-neutral-500"
+                />
                 <span className="truncate text-sm font-medium">
-                  <Highlighted text={hit.title} terms={terms} />
+                  <Marked text={hit.name} indices={hit.nameMatches} />
                 </span>
-                {dirname(hit.path) && (
+                {hit.parent && (
                   <span className="ml-auto shrink-0 truncate text-xs text-neutral-400 dark:text-neutral-500">
-                    {displayPath(dirname(hit.path))}
+                    <Marked text={hit.parent} indices={hit.parentMatches} />
                   </span>
                 )}
               </div>
-              {hit.snippet && (
-                <p
-                  className="mt-0.5 truncate pl-6 text-xs text-neutral-600 dark:text-neutral-400"
-                  data-testid="snippet"
-                >
-                  {hit.snippet.text.slice(0, hit.snippet.matchStart)}
-                  <mark className="rounded-sm bg-yellow-200 dark:bg-yellow-700/60 text-inherit">
-                    {hit.snippet.text.slice(hit.snippet.matchStart, hit.snippet.matchEnd)}
-                  </mark>
-                  {hit.snippet.text.slice(hit.snippet.matchEnd)}
-                </p>
-              )}
             </li>
           ))}
           {results.length === 0 && (
             <li className="px-3 py-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-              {query.trim() ? `No notes match “${query.trim()}”.` : 'No notes yet.'}
+              {query.trim() ? `Nothing matches “${query.trim()}”.` : 'No notes yet.'}
             </li>
           )}
         </ul>
@@ -175,10 +186,11 @@ function Palette({ search }: { search: SearchService }) {
   )
 }
 
-function Highlighted({ text, terms }: { text: string; terms: string[] }) {
+function Marked({ text, indices }: { text: string; indices: number[] }) {
+  if (!indices.length) return <>{text}</>
   return (
     <>
-      {highlightParts(text, terms).map((p, i) =>
+      {markRuns(text, indices).map((p, i) =>
         p.match ? (
           <mark key={i} className="rounded-sm bg-yellow-200 dark:bg-yellow-700/60 text-inherit">
             {p.text}

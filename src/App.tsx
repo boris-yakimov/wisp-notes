@@ -1,5 +1,5 @@
 import { ArrowLeft, Settings as SettingsIcon } from 'lucide-react'
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate } from 'react-router'
 import { AppShell } from './components/AppShell.tsx'
 import { Home } from './components/Home.tsx'
@@ -8,7 +8,6 @@ import { SettingsPage } from './components/SettingsPage.tsx'
 import { NotesSidebar } from './components/NotesSidebar.tsx'
 import { DialogHost } from './components/DialogHost.tsx'
 import { QuickOpen } from './components/QuickOpen.tsx'
-import { SearchService } from './search/service.ts'
 import { useUi } from './store/ui.ts'
 import { AuthBanner, ImportProgress, Notices, SaveStatus, StatusBar } from './components/StatusBar.tsx'
 import { SessionProvider } from './components/Workspace.tsx'
@@ -73,19 +72,18 @@ export default function App() {
   )
 }
 
-function useSearchService(session: RepoSession): SearchService | null {
-  const [search, setSearch] = useState<SearchService | null>(null)
+/** Download all notes into the device cache in the background, so they can be read offline. */
+function usePrefetchNotes(session: RepoSession) {
   useEffect(() => {
-    const s = new SearchService(session)
-    setSearch(s) // eslint-disable-line react-hooks/set-state-in-effect -- owns an external resource
-    return () => s.dispose()
+    // Let the UI settle first.
+    const timer = setTimeout(() => void session.prefetchNotes(4), 1500)
+    return () => clearTimeout(timer)
   }, [session])
-  return search
 }
 
 function Connected({ session }: { session: RepoSession }) {
   useGlobalShortcuts(session)
-  const search = useSearchService(session)
+  usePrefetchNotes(session)
   return (
     <>
       <AppShell
@@ -112,7 +110,7 @@ function Connected({ session }: { session: RepoSession }) {
       <Notices />
       <ImportProgress />
       <DialogHost />
-      {search && <QuickOpen search={search} />}
+      <QuickOpen />
     </>
   )
 }

@@ -3,7 +3,7 @@
 ![Wisp Notes in the Terminal theme: folder tree with icons and a Markdown note with headings, tasks and highlighted code blocks](docs/screenshot.png)
 
 Minimal personal notes app: Markdown notes in your own Google Drive, folder tree with icons, CodeMirror editor
-with vim motions and live preview, auto-save, full-text search, offline reading.
+with vim motions and live preview, auto-save, fuzzy search by page and folder name, offline reading.
 
 There is no server and no account with anyone but Google. The app is a static website that runs in your
 browser and talks directly to the Google Drive API. Each person who runs it creates their own (free) Google

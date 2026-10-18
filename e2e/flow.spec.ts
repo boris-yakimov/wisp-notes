@@ -79,8 +79,8 @@ test('sign in → browse → edit → auto-save → rename → search', async ({
   await expect.poll(() => drive.files()['Work/Roadmap.md']).toContain('Added from the browser')
   expect(drive.files()['Work/Plan.md']).toBeUndefined()
 
-  // Search (content match) and jump to the note with the match selected
-  await page.goto('/') // fresh load: cached tree + background prefetch
+  // Search by part of a name and jump to the note
+  await page.goto('/')
   if (isMobile) {
     nav = await ensureSidebar(page)
     await nav.getByRole('button', { name: /^Search/ }).click()
@@ -89,15 +89,14 @@ test('sign in → browse → edit → auto-save → rename → search', async ({
     await page.keyboard.press('Control+k')
   }
   const box = page.getByRole('combobox', { name: 'Search notes' })
-  await box.fill('pancakes')
+  await box.fill('cipe')
   const results = page.getByRole('listbox', { name: 'Results' }).getByRole('option')
-  await expect(results).toHaveCount(1, { timeout: 10_000 })
+  await expect(results).toHaveCount(1)
   await expect(results.first()).toContainText('Recipes')
-  await expect(results.first().locator('mark')).toHaveText(/pancakes/i)
+  await expect(results.first().locator('mark')).toHaveText('cipe')
   await box.press('Enter')
   await expect(page).toHaveURL(/\/n\/Home\/Recipes\.md$/)
   await expect(editor).toContainText('Pancakes')
-  expect(await page.evaluate(() => window.getSelection()?.toString())).toMatch(/pancakes/i)
 })
 
 test('shows the latest content from another device when returning to the tab', async ({ page, drive }) => {

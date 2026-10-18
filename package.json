@@ -8,7 +8,7 @@
     "url": "git+https://github.com/boris-yakimov/wisp-notes.git"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "version": "0.0.0",
   "type": "module",

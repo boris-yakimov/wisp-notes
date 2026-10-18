@@ -1,11 +1,10 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useRepo } from '../repo/session.ts'
 import { useUi } from '../store/ui.ts'
 import { setupFakeDrive } from '../test/msw.ts'
-import { getEditorView, renderApp, typeInEditor } from '../test/renderApp.tsx'
+import { getEditorView, renderApp } from '../test/renderApp.tsx'
 
-const fake = setupFakeDrive({
+setupFakeDrive({
   files: {
     'Work/Roadmap.md': '# Roadmap\n\nShip the quarterly milestones.',
     'Home/Groceries.md': 'Milk, eggs and a roadmap poster.',
@@ -16,6 +15,7 @@ const fake = setupFakeDrive({
 beforeEach(() => useUi.setState({ expanded: {}, quickOpen: false }))
 
 const options = () => within(screen.getByRole('listbox', { name: 'Results' })).queryAllByRole('option')
+const names = () => options().map((o) => o.querySelector('.font-medium')!.textContent)
 
 async function openPalette() {
   await screen.findByRole('link', { name: 'Ideas' })
@@ -23,7 +23,7 @@ async function openPalette() {
   return screen.findByRole('combobox', { name: 'Search notes' })
 }
 
-describe('quick open (T12)', () => {
+describe('quick open', () => {
   it('opens with Ctrl+K and lists all notes for an empty query', async () => {
     renderApp('/')
     const input = await openPalette()
@@ -40,70 +40,68 @@ describe('quick open (T12)', () => {
     expect(screen.getByRole('combobox', { name: 'Search notes' })).toBeInTheDocument()
   })
 
-  it('searches content after background prefetch, title matches first, with highlighting', async () => {
+  it('matches part of a name anywhere, not just the start, and highlights it', async () => {
     renderApp('/')
     const input = await openPalette()
-    await userEvent.type(input, 'roadmap')
-    await waitFor(() => expect(options()).toHaveLength(2), { timeout: 4000 })
-    expect(options()[0]).toHaveTextContent('Roadmap')
-    expect(options()[0]!.querySelector('mark')).toHaveTextContent('Roadmap')
-    expect(within(options()[1]!).getByTestId('snippet').querySelector('mark')).toHaveTextContent('roadmap')
+    await userEvent.type(input, 'OADM')
+    expect(names()).toEqual(['Roadmap'])
+    expect(options()[0]!.querySelector('mark')).toHaveTextContent(/^oadm$/)
   })
 
-  it('navigates with the keyboard and opens the note with the match selected', async () => {
+  it('matches letters in order with gaps (fuzzy)', async () => {
     renderApp('/')
     const input = await openPalette()
-    await userEvent.type(input, 'milestones')
-    await waitFor(() => expect(options()).toHaveLength(1), { timeout: 4000 })
-    await userEvent.type(input, '{backspace}'.repeat(10) + 'roadmap')
-    await waitFor(() => expect(options()).toHaveLength(2))
+    await userEvent.type(input, 'grcr')
+    expect(names()).toEqual(['Groceries'])
+    expect([...options()[0]!.querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['Gr', 'c', 'r'])
+  })
+
+  it('finds folders, ranked above notes that only match by their folder', async () => {
+    renderApp('/')
+    const input = await openPalette()
+    await userEvent.type(input, 'ork')
+    expect(names()).toEqual(['Work', 'Roadmap'])
+    expect(options()[0]).toHaveAttribute('data-kind', 'folder')
+  })
+
+  it('combines terms across the folder path and name', async () => {
+    renderApp('/')
+    const input = await openPalette()
+    await userEvent.type(input, 'wo road')
+    expect(names()).toEqual(['Roadmap'])
+  })
+
+  it('does not search note contents', async () => {
+    renderApp('/')
+    const input = await openPalette()
+    await userEvent.type(input, 'milk')
+    expect(await screen.findByText('Nothing matches “milk”.')).toBeInTheDocument()
+  })
+
+  it('navigates with the keyboard and opens the chosen note', async () => {
+    renderApp('/')
+    const input = await openPalette()
+    await userEvent.type(input, 'o')
+    expect(names().length).toBeGreaterThan(1)
     expect(options()[0]).toHaveAttribute('aria-selected', 'true')
     await userEvent.keyboard('{ArrowDown}')
     expect(options()[1]).toHaveAttribute('aria-selected', 'true')
     expect(input).toHaveAttribute('aria-activedescendant', options()[1]!.id)
-    await userEvent.keyboard('{ArrowDown}')
-    expect(options()[0]).toHaveAttribute('aria-selected', 'true') // wraps
-    await userEvent.keyboard('{ArrowUp}{Enter}')
+    await userEvent.keyboard('{ArrowUp}{ArrowUp}')
+    expect(options()[options().length - 1]).toHaveAttribute('aria-selected', 'true') // wraps
+    await userEvent.clear(input)
+    await userEvent.type(input, 'dea{Enter}')
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-    await waitFor(() => expect(getEditorView().state.doc.toString()).toContain('roadmap poster'))
-    await waitFor(() => {
-      const sel = getEditorView().state.selection.main
-      expect(getEditorView().state.sliceDoc(sel.from, sel.to)).toBe('roadmap')
-    })
-  })
-
-  it('updates the index incrementally when a note is edited', async () => {
-    renderApp('/n/Ideas.md', { vim: false })
     await waitFor(() => expect(getEditorView().state.doc.toString()).toBe('Random thoughts'))
-    act(() => typeInEditor(' about zeppelins'))
-    await waitFor(() => expect(useRepo.getState().dirty['Ideas.md']).toBe(true))
-    const input = await openPalette()
-    await userEvent.type(input, 'zeppelin')
-    await waitFor(() =>
-      expect(options().map((o) => o.textContent)).toEqual([expect.stringContaining('Ideas')]),
-    )
   })
 
-  it('works offline from the cache', async () => {
-    const first = renderApp('/')
-    await openPalette()
-    await userEvent.type(screen.getByRole('combobox'), 'milk')
-    await waitFor(() => expect(options()).toHaveLength(1), { timeout: 4000 })
-    first.unmount()
-
-    fake.drive.offline = true
-    useUi.setState({ quickOpen: false })
+  it('choosing a folder expands it in the sidebar and focuses it', async () => {
     renderApp('/')
     const input = await openPalette()
-    await userEvent.type(input, 'milk')
-    await waitFor(() => expect(options()).toHaveLength(1))
-    expect(options()[0]).toHaveTextContent('Groceries')
-  })
-
-  it('shows an empty state', async () => {
-    renderApp('/')
-    const input = await openPalette()
-    await userEvent.type(input, 'qwertyuiop')
-    expect(await screen.findByText('No notes match “qwertyuiop”.')).toBeInTheDocument()
+    await userEvent.type(input, 'ome{Enter}')
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Notes' })
+    expect(await within(nav).findByRole('link', { name: 'Groceries' })).toBeInTheDocument()
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /^Home/ })).toHaveFocus())
   })
 })
