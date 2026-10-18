@@ -1,9 +1,14 @@
 # Wisp Notes
 
-![Wisp Notes in the Terminal theme: folder tree with icons and a Markdown note with headings, tasks and highlighted code blocks](docs/screenshot.png)
+![Wisp Notes in the Terminal theme: folder tree with colorful logo icons and a Markdown note with headings, tasks, a table with colored text and highlighted code blocks](docs/screenshot.png)
 
 Minimal personal notes app: Markdown notes in your own Google Drive, folder tree with icons, CodeMirror editor
-with vim motions and live preview, auto-save, fuzzy search by page and folder name, offline reading.
+with vim motions and live preview, auto-save, Telescope-style search with a preview (page and folder names, or
+inside pages), offline reading.
+
+| Fuzzy search of page and folder names (`Ctrl/Cmd+K`, `\ff`)                                                                         | Search inside pages (`Ctrl/Cmd+G`, `\fg`)                                                                                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Search palette: "netes" matches Kubernetes pages and folder, with a formatted preview of the focused page](docs/search-names.png) | ![Content search: every line containing "kubectl", with the focused match highlighted in a preview of the page](docs/search-contents.png) |
 
 There is no server and no account with anyone but Google. The app is a static website that runs in your
 browser and talks directly to the Google Drive API. Each person who runs it creates their own (free) Google
@@ -11,7 +16,7 @@ Cloud OAuth client, so nobody else's app ever gets access to your notes.
 
 ## Quick start
 
-Requirements: [Node.js](https://nodejs.org) 22.12 or newer (with npm), a Google account, and a browser.
+Requirements: [Node.js](https://nodejs.org) 22.22.2+ or 24.15+ (with npm), a Google account, and a browser.
 
 ```sh
 git clone https://github.com/boris-yakimov/wisp-notes.git
@@ -58,7 +63,7 @@ npm ci
 - **Code**: to keep text exactly as written (e.g. `argv[0]`), select it and choose **Code** in the same toolbar
   (or press `Ctrl/Cmd+E`; again inside the code to undo it), or **Code block** to put it on its own lines.
   Brackets that aren't links, like `argv[argc]`, already show as written.
-  Typing ```` ``` ```` at the start of a line adds the closing ```` ``` ```` below; type the language (`js`, `sh`, …) and press Enter.
+  Typing ` ``` ` at the start of a line adds the closing ` ``` ` below; type the language (`js`, `sh`, …) and press Enter.
 - **Tables**: Markdown tables show as a grid; put the cursor in one (click, arrow keys or vim `j`/`k`) to edit its
   Markdown. `Ctrl/Cmd+click` links inside a table to open them. Wide tables scroll sideways.
 - **Images**: paste an image or screenshot (`Ctrl/Cmd+V`, or `Ctrl/Cmd+Shift+V`, which also works in vim normal mode)

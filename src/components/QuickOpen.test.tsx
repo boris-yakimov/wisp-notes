@@ -232,6 +232,7 @@ describe('content search (grep)', () => {
       const sel = view.state.selection.main
       expect(view.state.sliceDoc(sel.from, sel.to)).toBe('npm ci')
     })
+    expect(preview.querySelector('.cm-search-hit')).toHaveTextContent('npm ci')
     expect(input).toHaveFocus()
   })
 

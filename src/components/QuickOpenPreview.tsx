@@ -120,7 +120,7 @@ function NotePreview({
         <p className="px-4 py-3 text-sm italic text-neutral-500 dark:text-neutral-400">Empty page</p>
       ) : (
         // Slightly smaller text than the editor, so more of the note fits; the match stands out.
-        <div className="min-h-0 flex-1 [&_.cm-editor]:!text-sm [&_.cm-selectionBackground]:!bg-yellow-200 dark:[&_.cm-selectionBackground]:!bg-yellow-700/60">
+        <div className="min-h-0 flex-1 [&_.cm-editor]:!text-sm [&_.cm-search-hit]:rounded-sm [&_.cm-search-hit]:bg-yellow-200 dark:[&_.cm-search-hit]:bg-yellow-700/60">
           <Suspense fallback={null}>
             <Editor
               ref={editor}
@@ -128,6 +128,7 @@ function NotePreview({
               key={`${loaded.path}\n${loaded.version}`}
               content={loaded.content}
               initialSelection={current ? match : undefined}
+              highlight={current ? match : undefined}
               readOnly
               vimEnabled={false}
               livePreviewEnabled={livePreview}

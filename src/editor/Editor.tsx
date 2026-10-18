@@ -2,8 +2,23 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
-import { Compartment, EditorState, Prec, Transaction, type Extension } from '@codemirror/state'
-import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view'
+import {
+  Compartment,
+  EditorState,
+  Prec,
+  StateEffect,
+  StateField,
+  Transaction,
+  type Extension,
+} from '@codemirror/state'
+import {
+  Decoration,
+  drawSelection,
+  EditorView,
+  keymap,
+  placeholder,
+  type DecorationSet,
+} from '@codemirror/view'
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useUi } from '../store/ui.ts'
@@ -51,6 +66,8 @@ export interface EditorProps {
   autoFocus?: boolean
   /** Selected and scrolled into view on mount (search match). */
   initialSelection?: { from: number; to: number }
+  /** Text marked as a search match (previews; drawn above code-block backgrounds, unlike the selection). */
+  highlight?: { from: number; to: number }
   /** Cursor and scroll position to restore on mount (ignored when `initialSelection` is set). */
   initialPosition?: ViewPosition
   /** Current cursor/scroll position, reported when the editor closes or the tab is hidden. */
@@ -156,6 +173,26 @@ async function pasteFromClipboard(view: EditorView, props: EditorProps) {
 
 const vimExt = (on: boolean): Extension => (on ? vim() : [])
 
+/** The `highlight` prop as a mark decoration. */
+const setHighlight = StateEffect.define<{ from: number; to: number } | null>()
+const highlightField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes)
+    for (const e of tr.effects) {
+      if (!e.is(setHighlight)) continue
+      const len = tr.state.doc.length
+      const r = e.value
+      deco =
+        r && r.to > r.from && r.to <= len
+          ? Decoration.set([Decoration.mark({ class: 'cm-search-hit' }).range(r.from, r.to)])
+          : Decoration.none
+    }
+    return deco
+  },
+  provide: (f) => EditorView.decorations.from(f),
+})
+
 const darkExt = (on: boolean): Extension => EditorView.darkTheme.of(on)
 const readOnlyExt = (ro: boolean): Extension => [EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]
 
@@ -252,6 +289,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           ]),
           c.preview.of(previewExt(p.livePreviewEnabled)),
           c.ro.of(readOnlyExt(!!p.readOnly)),
+          highlightField,
           EditorView.contentAttributes.of({
             'aria-label': p.ariaLabel ?? 'Note editor',
             spellcheck: 'true',
@@ -345,6 +383,16 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   useEffect(() => {
     viewRef.current?.dispatch({ effects: compartments.current.dark.reconfigure(darkExt(!!props.dark)) })
   }, [props.dark])
+
+  const hlFrom = props.highlight?.from
+  const hlTo = props.highlight?.to
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: setHighlight.of(
+        hlFrom !== undefined && hlTo !== undefined ? { from: hlFrom, to: hlTo } : null,
+      ),
+    })
+  }, [hlFrom, hlTo])
 
   const showRange = (from: number, to: number) => {
     const view = viewRef.current
