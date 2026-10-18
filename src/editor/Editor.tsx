@@ -23,6 +23,8 @@ export interface EditorHandle {
   focus: () => void
   /** Select a range and scroll it into view (search results). */
   selectRange: (from: number, to: number) => void
+  /** Like `selectRange`, without focusing the editor (previews). */
+  showRange: (from: number, to: number) => void
   view: () => EditorView | null
 }
 
@@ -72,9 +74,11 @@ function defineExCommands() {
   const save = (cm: { cm6: EditorView }) => saveHandlers.get(cm.cm6)?.()
   Vim.defineEx('write', 'w', save)
   Vim.defineEx('update', 'up', save)
-  // \ff in normal mode opens search (like a <leader>ff finder in nvim)
+  // \ff in normal mode opens search (like a <leader>ff finder in nvim), \fg searches inside notes (live grep)
   Vim.defineAction('openQuickOpen', () => useUi.getState().setQuickOpen(true))
   Vim.mapCommand('\\ff', 'action', 'openQuickOpen', {}, { context: 'normal' })
+  Vim.defineAction('openGrep', () => useUi.getState().setQuickOpen(true, 'contents'))
+  Vim.mapCommand('\\fg', 'action', 'openGrep', {}, { context: 'normal' })
 }
 
 /** Is vim on and not in insert mode? Then a paste goes on a new line below, like vim's `p` for lines. */
@@ -342,6 +346,16 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     viewRef.current?.dispatch({ effects: compartments.current.dark.reconfigure(darkExt(!!props.dark)) })
   }, [props.dark])
 
+  const showRange = (from: number, to: number) => {
+    const view = viewRef.current
+    if (!view) return
+    const len = view.state.doc.length
+    view.dispatch({
+      selection: { anchor: Math.min(from, len), head: Math.min(to, len) },
+      effects: EditorView.scrollIntoView(Math.min(from, len), { y: 'center' }),
+    })
+  }
+
   useImperativeHandle(ref, () => ({
     replaceContent(text) {
       const view = viewRef.current
@@ -366,15 +380,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     getContent: () => viewRef.current?.state.doc.toString() ?? '',
     focus: () => viewRef.current?.focus(),
     selectRange(from, to) {
-      const view = viewRef.current
-      if (!view) return
-      const len = view.state.doc.length
-      view.dispatch({
-        selection: { anchor: Math.min(from, len), head: Math.min(to, len) },
-        effects: EditorView.scrollIntoView(Math.min(from, len), { y: 'center' }),
-      })
-      view.focus()
+      showRange(from, to)
+      viewRef.current?.focus()
     },
+    showRange,
     view: () => viewRef.current,
   }))
 

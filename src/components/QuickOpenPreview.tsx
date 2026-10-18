@@ -1,9 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import type { EditorHandle } from '../editor/Editor.tsx'
 import { isImagePath, resolveRepoPath } from '../repo/links.ts'
 import { useSession } from '../repo/SessionContext.ts'
 import { useRepo } from '../repo/session.ts'
 import { findContainer, findNote, type FolderNode } from '../repo/tree.ts'
-import type { NameHit } from '../search/names.ts'
 import { useResolvedTheme } from '../settings/theme.ts'
 import { useApp } from '../store/app.ts'
 import { FolderIcon } from './FolderIcon.tsx'
@@ -21,7 +21,16 @@ type Loaded = { path: string; version: string; content: string } | { path: strin
  * the editor (read-only, with live preview: headings, code, colors, tables, images), or a folder's
  * contents.
  */
-export function QuickOpenPreview({ hit, root }: { hit: NameHit | undefined; root: FolderNode }) {
+export function QuickOpenPreview({
+  hit,
+  root,
+  match,
+}: {
+  hit: { kind: 'note' | 'folder'; path: string } | undefined
+  root: FolderNode
+  /** Content search: the match to select and scroll to. */
+  match?: { from: number; to: number }
+}) {
   return (
     <section
       aria-label="Preview"
@@ -33,14 +42,23 @@ export function QuickOpenPreview({ hit, root }: { hit: NameHit | undefined; root
           <FolderPreview folder={findContainer(root, hit.path)} />
         </div>
       ) : (
-        <NotePreview path={hit.path} subPages={findNote(root, hit.path)?.children} />
+        <NotePreview path={hit.path} subPages={findNote(root, hit.path)?.children} match={match} />
       )}
     </section>
   )
 }
 
-function NotePreview({ path, subPages }: { path: string; subPages: FolderNode | undefined }) {
+function NotePreview({
+  path,
+  subPages,
+  match,
+}: {
+  path: string
+  subPages: FolderNode | undefined
+  match?: { from: number; to: number }
+}) {
   const session = useSession()
+  const editor = useRef<EditorHandle>(null)
   const livePreview = useApp((s) => s.settings.livePreview)
   const dark = useResolvedTheme() !== 'light'
   // Re-read when the note changes (sync, edits): version = content hash or draft timestamp.
@@ -78,6 +96,12 @@ function NotePreview({ path, subPages }: { path: string; subPages: FolderNode | 
 
   // While the next note loads, keep showing the previous one (dimmed) instead of flashing empty.
   const current = loaded?.path === path
+  // Another match in the same note: move the selection (a new note mounts with `initialSelection`).
+  const matchFrom = current ? match?.from : undefined
+  const matchTo = current ? match?.to : undefined
+  useEffect(() => {
+    if (matchFrom !== undefined && matchTo !== undefined) editor.current?.showRange(matchFrom, matchTo)
+  }, [matchFrom, matchTo])
   if (!loaded) return null
   if ('error' in loaded)
     return current ? (
@@ -95,13 +119,15 @@ function NotePreview({ path, subPages }: { path: string; subPages: FolderNode | 
       {!loaded.content.trim() ? (
         <p className="px-4 py-3 text-sm italic text-neutral-500 dark:text-neutral-400">Empty page</p>
       ) : (
-        // Slightly smaller text than the editor, so more of the note fits.
-        <div className="min-h-0 flex-1 [&_.cm-editor]:!text-sm">
+        // Slightly smaller text than the editor, so more of the note fits; the match stands out.
+        <div className="min-h-0 flex-1 [&_.cm-editor]:!text-sm [&_.cm-selectionBackground]:!bg-yellow-200 dark:[&_.cm-selectionBackground]:!bg-yellow-700/60">
           <Suspense fallback={null}>
             <Editor
+              ref={editor}
               // A fresh read-only editor per note version (the editor reads `content` on mount only).
               key={`${loaded.path}\n${loaded.version}`}
               content={loaded.content}
+              initialSelection={current ? match : undefined}
               readOnly
               vimEnabled={false}
               livePreviewEnabled={livePreview}

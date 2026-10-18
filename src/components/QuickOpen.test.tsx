@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { EditorView } from '@codemirror/view'
 import { useUi } from '../store/ui.ts'
 import { setupFakeDrive } from '../test/msw.ts'
 import { getEditorView, renderApp } from '../test/renderApp.tsx'
@@ -160,5 +161,98 @@ describe('quick open preview', () => {
     await userEvent.type(input, 'roadmap')
     expect(names()).toEqual(['Roadmap'])
     expect(screen.queryByRole('region', { name: 'Preview' })).not.toBeInTheDocument()
+  })
+})
+
+describe('content search (grep)', () => {
+  const realMatchMedia = window.matchMedia
+  afterEach(() => {
+    window.matchMedia = realMatchMedia
+  })
+  const lines = () => options().map((o) => within(o).getByTestId('line').textContent)
+
+  async function openGrep() {
+    await screen.findByRole('link', { name: 'Ideas' })
+    await userEvent.keyboard('{Control>}g{/Control}')
+    return screen.findByRole('combobox', { name: 'Search note contents' })
+  }
+
+  it('opens with Ctrl+G and lists matching lines from all pages', async () => {
+    renderApp('/')
+    const input = await openGrep()
+    expect(input).toHaveFocus()
+    await userEvent.type(input, 'roadmap')
+    // Contents become searchable once the background download has cached them.
+    await waitFor(() => expect(options()).toHaveLength(2), { timeout: 4000 })
+    expect(lines()).toEqual(['Milk, eggs and a roadmap poster.', '# Roadmap'])
+    expect(options()[0]).toHaveTextContent('Groceries:1')
+    expect(options()[0]!.querySelector('mark')).toHaveTextContent('roadmap')
+    expect(screen.getByTestId('grep-status')).toHaveTextContent('2 lines')
+  })
+
+  it('is case-sensitive when the query has capitals, and ignores color tags', async () => {
+    renderApp('/')
+    const input = await openGrep()
+    await userEvent.type(input, 'Roadmap')
+    await waitFor(() => expect(lines()).toEqual(['# Roadmap']), { timeout: 4000 })
+    await userEvent.clear(input)
+    await userEvent.type(input, 'color')
+    expect(await screen.findByText('No page contains “color”.')).toBeInTheDocument()
+    await userEvent.clear(input)
+    await userEvent.type(input, 'quarterly')
+    expect(lines()).toEqual(['Ship the quarterly milestones.'])
+  })
+
+  it('opens the page with the match selected', async () => {
+    renderApp('/')
+    const input = await openGrep()
+    await userEvent.type(input, 'poster')
+    await waitFor(() => expect(options()).toHaveLength(1), { timeout: 4000 })
+    await userEvent.keyboard('{Enter}')
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    await waitFor(() => expect(getEditorView().state.doc.toString()).toContain('roadmap poster'))
+    await waitFor(() => {
+      const sel = getEditorView().state.selection.main
+      expect(getEditorView().state.sliceDoc(sel.from, sel.to)).toBe('poster')
+    })
+  })
+
+  it('previews the page with the match selected', async () => {
+    window.matchMedia = ((query: string) => ({
+      ...realMatchMedia(query),
+      matches: query.includes('min-width'),
+    })) as typeof window.matchMedia
+    renderApp('/')
+    const input = await openGrep()
+    await userEvent.type(input, 'npm ci')
+    await waitFor(() => expect(options()).toHaveLength(1), { timeout: 4000 })
+    const preview = screen.getByRole('region', { name: 'Preview' })
+    await waitFor(() => {
+      const view = EditorView.findFromDOM(preview.querySelector('.cm-editor') as HTMLElement)!
+      const sel = view.state.selection.main
+      expect(view.state.sliceDoc(sel.from, sel.to)).toBe('npm ci')
+    })
+    expect(input).toHaveFocus()
+  })
+
+  it('switches between names and contents with Ctrl+K / Ctrl+G, keeping the query', async () => {
+    renderApp('/')
+    const input = await openGrep()
+    await userEvent.type(input, 'ideas')
+    await userEvent.keyboard('{Control>}k{/Control}')
+    const names = screen.getByRole('combobox', { name: 'Search notes' })
+    expect(names).toHaveValue('ideas')
+    expect(options()[0]).toHaveTextContent('Ideas')
+    await userEvent.click(screen.getByRole('button', { name: 'Contents' }))
+    expect(screen.getByRole('combobox', { name: 'Search note contents' })).toHaveFocus()
+    await userEvent.keyboard('{Control>}g{/Control}') // same mode again: close
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('opens with \\fg outside text fields', async () => {
+    renderApp('/')
+    await screen.findByRole('link', { name: 'Ideas' })
+    await userEvent.keyboard('\\fg')
+    expect(await screen.findByRole('combobox', { name: 'Search note contents' })).toBeInTheDocument()
   })
 })

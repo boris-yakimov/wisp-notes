@@ -27,3 +27,12 @@ describe('vim \\ff', () => {
     expect(useUi.getState().quickOpen).toBe(false)
   })
 })
+
+describe('vim \\fg', () => {
+  it('opens content search from normal mode', () => {
+    const { view, keys } = setup(true)
+    keys(['\\', 'f', 'g'])
+    expect(useUi.getState()).toMatchObject({ quickOpen: true, quickOpenMode: 'contents' })
+    expect(view.state.doc.toString()).toBe('hello')
+  })
+})

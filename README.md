@@ -51,7 +51,7 @@ npm ci
   before renames/moves/deletes, and when you close the tab.
 - **Sidebar width**: drag the sidebar's right edge to make it wider or narrower (double-click it to reset); the
   width is remembered on this device.
-- **Shortcuts**: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+E` mark the selection as code, `Ctrl/Cmd+click` a link to open it (links to
+- **Shortcuts**: `Ctrl/Cmd+K` (or `\ff`) search page and folder names, `Ctrl/Cmd+G` (or `\fg`) search inside pages, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+E` mark the selection as code, `Ctrl/Cmd+click` a link to open it (links to
   other notes open in the app, websites in a new tab).
 - **Text color**: select text (mouse, or vim visual mode) and pick a color (Red, Orange, Yellow, Green, Blue, Purple, Gray) or **Clear** in the small
   toolbar that appears. It's saved as `<span style="color: green">…</span>`, which other Markdown apps show too.

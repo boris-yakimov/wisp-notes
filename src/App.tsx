@@ -128,16 +128,21 @@ function useGlobalShortcuts(session: RepoSession) {
       } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         e.stopPropagation()
-        const ui = useUi.getState()
-        ui.setQuickOpen(!ui.quickOpen)
+        useUi.getState().toggleQuickOpen('names')
+      } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
+        // Replaces the browser's / editor's "find next".
+        e.preventDefault()
+        e.stopPropagation()
+        useUi.getState().toggleQuickOpen('contents')
       } else if (!mod && !e.altKey && e.key.length === 1 && !isTextField(e.target)) {
         const now = Date.now()
         seq = (now - seqAt < 1000 ? seq : '') + e.key
         seqAt = now
-        if (seq.endsWith('\\ff')) {
+        if (seq.endsWith('\\ff') || seq.endsWith('\\fg')) {
+          const mode = seq.endsWith('\\ff') ? 'names' : 'contents'
           seq = ''
           e.preventDefault()
-          useUi.getState().setQuickOpen(true)
+          useUi.getState().setQuickOpen(true, mode)
         }
       }
     }

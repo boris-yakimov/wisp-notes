@@ -32,6 +32,8 @@ function loadWidth(): number {
 const isSmallScreen = () => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches
 
 /** Pure UI state (no repo data). */
+export type QuickOpenMode = 'names' | 'contents'
+
 export interface UiState {
   expanded: Record<string, boolean>
   sidebarOpen: boolean
@@ -40,6 +42,8 @@ export interface UiState {
   /** `persist: false` while dragging; the final width is saved when the drag ends. */
   setSidebarWidth: (width: number, persist?: boolean) => void
   quickOpen: boolean
+  /** What the quick-open palette searches: page/folder names (Ctrl+K, \ff) or page contents (Ctrl+G, \fg). */
+  quickOpenMode: QuickOpenMode
   vimMode: string | null
   toggleFolder: (path: string) => void
   setExpanded: (path: string, open: boolean) => void
@@ -48,7 +52,10 @@ export interface UiState {
   setSidebarOpen: (open: boolean) => void
   /** Close the drawer after navigating, on small screens only. */
   closeSidebarOnMobile: () => void
-  setQuickOpen: (open: boolean) => void
+  /** Open (in `mode`, default names) or close the palette. */
+  setQuickOpen: (open: boolean, mode?: QuickOpenMode) => void
+  /** Shortcut behavior: open in `mode`; switch to it if open in the other mode; close if already in it. */
+  toggleQuickOpen: (mode: QuickOpenMode) => void
   setVimMode: (mode: string | null) => void
 }
 
@@ -67,6 +74,7 @@ export const useUi = create<UiState>((set, get) => {
       if (save) localStorage.setItem(WIDTH_KEY, String(sidebarWidth))
     },
     quickOpen: false,
+    quickOpenMode: 'names',
     vimMode: null,
     toggleFolder: (path) => persist({ ...get().expanded, [path]: !get().expanded[path] }),
     setExpanded: (path, open) => persist({ ...get().expanded, [path]: open }),
@@ -87,7 +95,13 @@ export const useUi = create<UiState>((set, get) => {
     closeSidebarOnMobile: () => {
       if (isSmallScreen()) set({ sidebarOpen: false })
     },
-    setQuickOpen: (quickOpen) => set({ quickOpen }),
+    setQuickOpen: (quickOpen, mode = 'names') =>
+      set(quickOpen ? { quickOpen, quickOpenMode: mode } : { quickOpen }),
+    toggleQuickOpen: (mode) => {
+      const { quickOpen, quickOpenMode } = get()
+      if (quickOpen && quickOpenMode === mode) set({ quickOpen: false })
+      else set({ quickOpen: true, quickOpenMode: mode })
+    },
     setVimMode: (vimMode) => set({ vimMode }),
   }
 })

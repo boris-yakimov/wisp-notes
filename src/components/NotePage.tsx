@@ -27,6 +27,8 @@ export function NotePage() {
 export interface NoteNavState {
   /** Text to highlight after opening (from search). */
   highlight?: string
+  /** Where the highlighted text is (offset in the note); falls back to its first occurrence. */
+  at?: number
 }
 
 function NoteView({ path }: { path: string }) {
@@ -37,7 +39,9 @@ function NoteView({ path }: { path: string }) {
   const expandTo = useUi((s) => s.expandTo)
   const location = useLocation()
   const navigate = useNavigate()
-  const highlight = (location.state as NoteNavState | null)?.highlight
+  const navState = location.state as NoteNavState | null
+  const highlight = navState?.highlight
+  const highlightAt = navState?.at
   const editor = useRef<EditorHandle>(null)
   const [load, setLoad] = useState<Load>({ state: 'loading' })
   // Content version of the note (hash, or temporary ID while it's being created); undefined = missing.
@@ -83,9 +87,12 @@ function NoteView({ path }: { path: string }) {
   // Select a search match when opened from search.
   const initialSelection = useMemo(() => {
     if (load.state !== 'ready' || !highlight) return undefined
-    const i = load.content.toLowerCase().indexOf(highlight.toLowerCase())
-    return i >= 0 ? { from: i, to: i + highlight.length } : undefined
-  }, [load, highlight])
+    const lower = load.content.toLowerCase()
+    const wanted = highlight.toLowerCase()
+    const at =
+      highlightAt !== undefined && lower.startsWith(wanted, highlightAt) ? highlightAt : lower.indexOf(wanted)
+    return at >= 0 ? { from: at, to: at + highlight.length } : undefined
+  }, [load, highlight, highlightAt])
   // Reopen where you left off (read once per note; NoteView remounts per path).
   const [initialPosition] = useState(() => loadPosition(path))
   const onPosition = useCallback((pos: ViewPosition) => savePosition(path, pos), [path])
