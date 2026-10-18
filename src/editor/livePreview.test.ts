@@ -88,6 +88,9 @@ describe('computeDecorations', () => {
     const d = decos(t, t.length)
     expect(d.filter((x) => x.value === 'cm-lp-quote')).toHaveLength(1)
     expect(d.filter((x) => x.value === 'cm-lp-codeblock')).toHaveLength(3)
+    const lineOf = (cls: string) => d.filter((x) => x.value === cls).map((x) => x.from)
+    expect(lineOf('cm-lp-codeblock-first')).toEqual([t.indexOf('```js')])
+    expect(lineOf('cm-lp-codeblock-last')).toEqual([t.lastIndexOf('```')])
     expect(hiddenText(t, d)).toEqual(['> '])
   })
 

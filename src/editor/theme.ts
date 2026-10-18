@@ -73,7 +73,19 @@ export const editorTheme = EditorView.theme({
     fontFamily: 'var(--mono-font)',
     fontSize: '0.9em',
   },
-  '.cm-lp-codeblock': { backgroundColor: 'var(--md-code-bg)' },
+  // Notion-style block: text inset from the background's edges, rounded corners.
+  // Padding (not margin) so CodeMirror's line-height measurement stays correct.
+  '.cm-line.cm-lp-codeblock': { backgroundColor: 'var(--md-code-bg)', padding: '0 16px 0 20px' },
+  '.cm-line.cm-lp-codeblock-first': {
+    paddingTop: '12px',
+    borderTopLeftRadius: '6px',
+    borderTopRightRadius: '6px',
+  },
+  '.cm-line.cm-lp-codeblock-last': {
+    paddingBottom: '12px',
+    borderBottomLeftRadius: '6px',
+    borderBottomRightRadius: '6px',
+  },
   '.cm-lp-quote': { borderLeft: '3px solid var(--md-rule)', paddingLeft: '12px', color: 'var(--md-quote)' },
   '.cm-lp-hr': { borderBottom: '1px solid var(--md-rule)' },
   '.cm-lp-h1, .cm-lp-h2': { paddingTop: '0.4em' },

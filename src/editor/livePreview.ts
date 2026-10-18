@@ -96,10 +96,10 @@ export function computeDecorations(
   const cursorIn = (from: number, to: number) =>
     focused && state.selection.ranges.some((r) => r.from <= to && r.to >= from)
   const tree = syntaxTree(state)
-  const seenLines = new Set<number>()
+  const seenLines = new Set<string>()
   const addLine = (pos: number, cls: string) => {
     const line = doc.lineAt(pos)
-    const key = line.from * 8 + cls.length // cheap de-dupe per line+class
+    const key = `${line.from}:${cls}` // de-dupe per line+class
     if (seenLines.has(key)) return
     seenLines.add(key)
     out.push({ from: line.from, to: line.from, kind: 'line', value: cls })
@@ -157,13 +157,18 @@ export function computeDecorations(
               out.push({ from: node.from, to: end, kind: 'hide' })
             }
             return
-          case 'FencedCode':
-            for (let p = node.from; p <= node.to;) {
-              const line = doc.lineAt(p)
+          case 'FencedCode': {
+            const first = doc.lineAt(node.from).number
+            const last = doc.lineAt(node.to).number
+            for (let n = first; n <= last; n++) {
+              const line = doc.line(n)
               addLine(line.from, 'cm-lp-codeblock')
-              p = line.to + 1
+              // First/last lines get the block's rounded corners and vertical padding.
+              if (n === first) addLine(line.from, 'cm-lp-codeblock-first')
+              if (n === last) addLine(line.from, 'cm-lp-codeblock-last')
             }
             return false
+          }
           case 'ListMark': {
             if (isActive(node.from)) return
             const text = doc.sliceString(node.from, node.to)
