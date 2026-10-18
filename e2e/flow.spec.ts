@@ -470,7 +470,7 @@ test('color selected text green or red from the toolbar, also in vim visual mode
   // Mouse: double-click a word selects it, the toolbar appears
   await editor.getByText('Pay the deposit today').dblclick({ position: { x: 5, y: 8 } })
   await page.getByRole('button', { name: 'Color text red' }).click()
-  await expect(page.getByRole('toolbar', { name: 'Text color' })).toHaveCount(0)
+  await expect(page.getByRole('toolbar', { name: 'Format text' })).toHaveCount(0)
 
   // vim visual mode: select "paid" with v + e
   await editor.getByText('Booking is paid').click()
@@ -603,4 +603,39 @@ test('color tags stay hidden on the cursor line; arrows and Backspace treat them
   await expect(page.getByRole('status', { name: 'Save status: Saved' })).toBeVisible({ timeout: 10_000 })
   expect(drive.files()['Inbox.md']).toBe('Pay <span style="color: green">tXhe deposi</span>\nnext')
   await expect(page.locator('.cm-color-green')).toHaveText('tXhe deposi')
+})
+
+test('argv[0] stays plain text; selected text can be marked as code', async ({ page, drive }) => {
+  drive.write('Inbox.md', 'The first arg is argv[0] here\n\nnext')
+  await signedIn(page) // vim on
+  await page.goto('/n/Inbox.md')
+  const first = page.locator('.cm-line').first()
+  await expect(first).toHaveText('The first arg is argv[0] here') // brackets kept
+  const nolink = page.locator('.cm-nolink')
+  await expect(nolink).toHaveText('[0]')
+  const plainColor = await first.evaluate((el) => getComputedStyle(el).color)
+  for (const el of await nolink.locator('span').all()) {
+    expect(await el.evaluate((e) => getComputedStyle(e).color)).toBe(plainColor)
+    expect(await el.evaluate((e) => getComputedStyle(e).textDecorationLine)).toBe('none')
+  }
+
+  // vim visual mode over "argv[0]", then the toolbar's Code button
+  await page.locator('.cm-line').last().click()
+  await page.keyboard.press('Escape')
+  await page.keyboard.type('gg04wvE')
+  await page.getByRole('button', { name: 'Mark as code (Ctrl/Cmd+E)' }).click()
+  await expect(page.getByTestId('vim-mode')).toHaveText(/normal/i)
+  await page.keyboard.type('G') // cursor off the line: backticks hidden
+  await expect(first).toHaveText('The first arg is argv[0] here')
+  await expect(page.locator('.cm-nolink')).toHaveCount(0) // inside code, not a would-be link
+  await page.keyboard.type(':w')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => drive.files()['Inbox.md']).toBe('The first arg is `argv[0]` here\n\nnext')
+
+  // Ctrl+E inside the code removes it again
+  await page.keyboard.type('gg05w')
+  await page.keyboard.press('ControlOrMeta+e')
+  await page.keyboard.type(':w')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => drive.files()['Inbox.md']).toBe('The first arg is argv[0] here\n\nnext')
 })

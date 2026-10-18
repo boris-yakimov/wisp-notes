@@ -5,7 +5,8 @@ import { render } from '@testing-library/react'
 import { createRef } from 'react'
 import { Editor, type EditorHandle } from './Editor.tsx'
 import { findImages } from './images.ts'
-import { linkAt } from './links.ts'
+import { isRealLink, linkAt } from './links.ts'
+import { syntaxTree } from '@codemirror/language'
 
 function stateFor(doc: string) {
   const state = EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] })
@@ -122,5 +123,41 @@ describe('inline images', () => {
     )
     expect(document.querySelector('.cm-image img')).toHaveAttribute('alt', 'shot')
     expect(document.querySelector('.cm-image-missing')).toHaveTextContent('gone (image not available)')
+  })
+})
+
+describe('brackets that are not links', () => {
+  /** Text of each `[…]` the parser calls a link, and whether it really is one. */
+  function links(doc: string) {
+    const s = stateFor(doc)
+    const out: [string, boolean][] = []
+    syntaxTree(s).iterate({
+      enter: (n) => {
+        if (n.name === 'Link') out.push([s.sliceDoc(n.from, n.to), isRealLink(s, n.node)])
+      },
+    })
+    return out
+  }
+
+  it('treats argv[0] and a[i][j] as text, links with a URL or definition as links', () => {
+    expect(links('argv[0] and a[i][j]')).toEqual([
+      ['[0]', false],
+      ['[i][j]', false],
+    ])
+    expect(links('[x](u) [Ref] [t][ref]\n\n[ref]: http://e.example')).toEqual([
+      ['[x](u)', true],
+      ['[Ref]', true],
+      ['[t][ref]', true],
+    ])
+  })
+
+  it('keeps the brackets visible and unstyled in the editor', () => {
+    const ref = createRef<EditorHandle>()
+    render(<Editor ref={ref} content={'use argv[argc] here\n\nend'} vimEnabled={false} livePreviewEnabled />)
+    const view = ref.current!.view()!
+    ensureSyntaxTree(view.state, view.state.doc.length, 5000)
+    view.dispatch({ selection: { anchor: view.state.doc.length } })
+    expect(view.contentDOM.querySelector('.cm-line')!.textContent).toBe('use argv[argc] here')
+    expect(document.querySelector('.cm-nolink')).toHaveTextContent('[argc]')
   })
 })

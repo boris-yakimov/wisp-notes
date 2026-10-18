@@ -88,7 +88,10 @@ describe('text colors in the editor', () => {
     const view = setup('Pay the deposit today')
     view.dispatch({ selection: { anchor: 4, head: 15 } })
     const labels = [...document.querySelectorAll('.cm-color-toolbar button')].map((b) => b.textContent)
-    expect(labels).toEqual(['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple', 'Gray', 'Clear'])
+    expect(labels).toEqual([
+      ...['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple', 'Gray', 'Clear'],
+      ...['Code', 'Code block'],
+    ])
     document.querySelector<HTMLButtonElement>('[aria-label="Color text orange"]')!.click()
     expect(view.state.doc.toString()).toBe(`Pay ${O('the deposit')} today`)
     expect(document.querySelector('.cm-color-orange')).toHaveTextContent('the deposit')

@@ -9,6 +9,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import { getCM, Vim } from '@replit/codemirror-vim'
+import { applyCode } from './codeFormat.ts'
 import { CLOSE, findColorSpans, OPEN, TEXT_COLORS, type TextColor } from '../repo/textColors.ts'
 
 export type { TextColor }
@@ -189,7 +190,7 @@ export function protectedDeletion(state: EditorState, from: number, to: number):
 }
 
 /** Edits that change tags on purpose. */
-const RAW_EDITS = ['undo', 'redo', 'remote', 'input.color']
+const RAW_EDITS = ['undo', 'redo', 'remote', 'input.color', 'input.format']
 
 /** Keeps the cursor off hidden tags and deletions from breaking them (live preview only). */
 const tagGuard = EditorState.transactionFilter.of((tr) => {
@@ -251,7 +252,7 @@ function toolbar(state: EditorState): Tooltip | null {
       const dom = document.createElement('div')
       dom.className = 'cm-color-toolbar'
       dom.setAttribute('role', 'toolbar')
-      dom.setAttribute('aria-label', 'Text color')
+      dom.setAttribute('aria-label', 'Format text')
       const button = (label: string, cls: string, color: TextColor | null) => {
         const b = document.createElement('button')
         b.type = 'button'
@@ -266,6 +267,25 @@ function toolbar(state: EditorState): Tooltip | null {
       }
       for (const c of TEXT_COLORS) dom.append(button(LABELS[c], `cm-color-btn cm-color-${c}`, c))
       dom.append(button('Clear', 'cm-color-btn', null))
+      // Keep text exactly as written (e.g. `argv[0]`): inline code, or a code block on its own lines.
+      const sep = document.createElement('span')
+      sep.className = 'cm-format-sep'
+      sep.setAttribute('aria-hidden', 'true')
+      dom.append(sep)
+      for (const [label, block, title] of [
+        ['Code', false, 'Mark as code (Ctrl/Cmd+E)'],
+        ['Code block', true, 'Put in a code block'],
+      ] as const) {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.className = 'cm-color-btn cm-format-code'
+        b.textContent = label
+        b.setAttribute('aria-label', title)
+        b.title = title
+        b.addEventListener('mousedown', (e) => e.preventDefault())
+        b.addEventListener('click', () => applyCode(view, block))
+        dom.append(b)
+      }
       return { dom }
     },
   }
@@ -277,7 +297,7 @@ const toolbarField = StateField.define<Tooltip | null>({
   provide: (f) => showTooltip.from(f),
 })
 
-/** Colored text display (tags hidden with live preview) and the color toolbar on selections. */
+/** Colored text display (tags hidden with live preview) and the color/code toolbar on selections. */
 export function textColors(hideTags: boolean): Extension {
   return [colorDisplay(hideTags), hideTags ? tagGuard : [], toolbarField]
 }

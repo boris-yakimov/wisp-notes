@@ -51,10 +51,13 @@ npm ci
   before renames/moves/deletes, and when you close the tab.
 - **Sidebar width**: drag the sidebar's right edge to make it wider or narrower (double-click it to reset); the
   width is remembered on this device.
-- **Shortcuts**: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+click` a link to open it (links to
+- **Shortcuts**: `Ctrl/Cmd+K` search, `Ctrl/Cmd+S` or `:w` save now, `Ctrl/Cmd+E` mark the selection as code, `Ctrl/Cmd+click` a link to open it (links to
   other notes open in the app, websites in a new tab).
 - **Text color**: select text (mouse, or vim visual mode) and pick a color (Red, Orange, Yellow, Green, Blue, Purple, Gray) or **Clear** in the small
   toolbar that appears. It's saved as `<span style="color: green">…</span>`, which other Markdown apps show too.
+- **Code**: to keep text exactly as written (e.g. `argv[0]`), select it and choose **Code** in the same toolbar
+  (or press `Ctrl/Cmd+E`; again inside the code to undo it), or **Code block** to put it on its own lines.
+  Brackets that aren't links, like `argv[argc]`, already show as written.
 - **Tables**: Markdown tables show as a grid; put the cursor in one (click, arrow keys or vim `j`/`k`) to edit its
   Markdown. `Ctrl/Cmd+click` links inside a table to open them. Wide tables scroll sideways.
 - **Images**: paste an image or screenshot (`Ctrl/Cmd+V`, or `Ctrl/Cmd+Shift+V`, which also works in vim normal mode)

@@ -7,9 +7,10 @@ import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useUi } from '../store/ui.ts'
+import { applyCode } from './codeFormat.ts'
 import { textColors } from './colors.ts'
 import { inlineImages, type ImageResolver } from './images.ts'
-import { linkClick } from './links.ts'
+import { linkClick, plainBrackets } from './links.ts'
 import { livePreview } from './livePreview.ts'
 import type { ViewPosition } from './positions.ts'
 import { tablePreview } from './tables.ts'
@@ -196,6 +197,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: true }),
           markdownHighlight,
           linkClick((href) => propsRef.current.onOpenLink?.(href)),
+          plainBrackets,
           EditorView.domEventHandlers({
             paste(e, view) {
               const onPaste = propsRef.current.onPasteImage
@@ -208,10 +210,18 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
             },
           }),
           // Ctrl/Cmd+Shift+V reads the clipboard itself, so it also works in vim normal/visual mode
-          // (where vim takes Ctrl+V and no paste event happens). Runs before vim's key handling.
+          // (where vim takes Ctrl+V and no paste event happens). Runs before vim's key handling,
+          // like Ctrl/Cmd+E (mark as code).
           Prec.highest(
             EditorView.domEventHandlers({
               keydown(e, view) {
+                // Ctrl/Cmd+E: mark the selection as code (or remove it inside inline code). Only then
+                // is the key taken, so vim's own Ctrl+E (scroll down) still works otherwise.
+                if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
+                  if (view.state.readOnly || !applyCode(view, false)) return false
+                  e.preventDefault()
+                  return true
+                }
                 if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey || e.key.toLowerCase() !== 'v')
                   return false
                 if (view.state.readOnly) return false

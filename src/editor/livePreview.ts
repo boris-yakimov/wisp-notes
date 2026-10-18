@@ -8,6 +8,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
+import { isRealLink } from './links.ts'
 
 /**
  * Obsidian-style live preview: Markdown syntax markers are hidden except on lines
@@ -135,6 +136,8 @@ export function computeDecorations(
             }
             return
           case 'Link': {
+            // `argv[0]` is not a link: keep its brackets (links.ts shows it unstyled).
+            if (!isRealLink(state, node.node)) return false
             if (isActive(node.from)) return false
             const marks = node.node.getChildren('LinkMark')
             const open = marks[0]
@@ -144,6 +147,10 @@ export function computeDecorations(
             out.push({ from: close.from, to: node.to, kind: 'hide' })
             return false
           }
+          case 'Escape':
+            // `\[` → `[`: the backslash only keeps the character from being formatted.
+            if (!isActive(node.from)) out.push({ from: node.from, to: node.from + 1, kind: 'hide' })
+            return
           case 'Blockquote':
             for (let p = node.from; p <= node.to;) {
               const line = doc.lineAt(p)

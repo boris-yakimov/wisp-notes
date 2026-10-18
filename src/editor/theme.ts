@@ -38,7 +38,13 @@ export const markdownHighlight = syntaxHighlighting(
     { tag: t.strikethrough, textDecoration: 'line-through' },
     { tag: t.link, color: 'var(--md-link)', textDecoration: 'underline' },
     { tag: t.url, color: 'var(--md-muted)' },
-    { tag: t.monospace, fontFamily: 'var(--mono-font)', fontSize: '0.9em' },
+    {
+      tag: t.monospace,
+      fontFamily: 'var(--mono-font)',
+      fontSize: '0.9em',
+      backgroundColor: 'var(--md-code-bg)',
+      borderRadius: '3px',
+    },
     { tag: t.quote, color: 'var(--md-quote)' },
     { tag: [t.processingInstruction, t.meta, t.contentSeparator], color: 'var(--md-syntax)' },
     { tag: t.keyword, color: 'var(--md-keyword)' },
@@ -86,6 +92,8 @@ export const editorTheme = EditorView.theme({
     borderBottomLeftRadius: '6px',
     borderBottomRightRadius: '6px',
   },
+  // `[…]` that isn't a link (e.g. `argv[0]`): plain text, not link-styled (see links.ts).
+  '.cm-nolink, .cm-nolink *': { color: 'inherit', textDecoration: 'none' },
   '.cm-lp-quote': { borderLeft: '3px solid var(--md-rule)', paddingLeft: '12px', color: 'var(--md-quote)' },
   '.cm-lp-hr': { borderBottom: '1px solid var(--md-rule)' },
   '.cm-lp-h1, .cm-lp-h2': { paddingTop: '0.4em' },
@@ -126,6 +134,8 @@ export const editorTheme = EditorView.theme({
   ...Object.fromEntries(TEXT_COLORS.map((c) => [`.cm-color-${c}`, { color: `var(--md-${c})` }])),
   '.cm-tooltip.cm-color-toolbar': {
     display: 'flex',
+    flexWrap: 'wrap', // phones: wrap instead of running off the screen
+    maxWidth: 'calc(100vw - 16px)',
     gap: '2px',
     padding: '3px',
     borderRadius: '6px',
@@ -144,6 +154,8 @@ export const editorTheme = EditorView.theme({
     cursor: 'pointer',
     color: 'var(--md-muted)',
   },
+  '.cm-format-sep': { width: '1px', margin: '2px 3px', backgroundColor: 'var(--md-rule)' },
+  '.cm-format-code': { fontFamily: 'var(--mono-font)', fontWeight: '500', color: 'inherit' },
   '.cm-color-btn:hover, .cm-color-btn:focus-visible': { backgroundColor: 'var(--md-selection)' },
   ...Object.fromEntries(TEXT_COLORS.map((c) => [`.cm-color-btn.cm-color-${c}`, { color: `var(--md-${c})` }])),
   '.cm-panels': { fontFamily: 'ui-monospace, monospace', fontSize: '14px' },
