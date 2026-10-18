@@ -3,7 +3,8 @@ import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { render } from '@testing-library/react'
 import { createRef } from 'react'
-import { codeBlockChanges, inlineCode, inlineCodeChanges } from './codeFormat.ts'
+import { EditorView } from '@codemirror/view'
+import { codeBlockChanges, fenceCompletion, inlineCode, inlineCodeChanges } from './codeFormat.ts'
 import { Editor, type EditorHandle } from './Editor.tsx'
 
 /** Apply a change function to `marked`, with the selection between `«` and `»` (a lone `|` = cursor). */
@@ -81,5 +82,49 @@ describe('format toolbar and shortcut', () => {
     view.dispatch({ selection: { anchor: 7 } })
     key()
     expect(view.state.doc.toString()).toBe('see argv[0] now')
+  })
+})
+
+describe('auto-closing code fences', () => {
+  /** Type one character at the `|` and return the document with `|` at the new cursor. */
+  function type(marked: string, ch = '`') {
+    const at = marked.indexOf('|')
+    const state = EditorState.create({
+      doc: marked.replace('|', ''),
+      extensions: [markdown({ base: markdownLanguage })],
+    })
+    ensureSyntaxTree(state, state.doc.length, 5000)
+    const spec = fenceCompletion(state, at, at, ch)
+    if (!spec) return null
+    const next = state.update(spec).state
+    const head = next.selection.main.head
+    return next.sliceDoc(0, head) + '|' + next.sliceDoc(head)
+  }
+
+  it('adds the closing fence and leaves the cursor for the language', () => {
+    expect(type('intro\n``|\nend')).toBe('intro\n```|\n```\nend')
+    expect(type('``|')).toBe('```|\n```')
+    expect(type('- item\n  ``|')).toBe('- item\n  ```|\n  ```') // keeps the indentation
+  })
+
+  it('leaves other backticks alone', () => {
+    expect(type('text ``|')).toBeNull() // not at the start of the line
+    expect(type('``|x')).toBeNull() // text after the cursor
+    expect(type('`|')).toBeNull() // only the second backtick
+    expect(type('``|', 'a')).toBeNull()
+    expect(type('```js\nlet a\n``|')).toBeNull() // closing an open block
+  })
+
+  it('works when typing in the editor', () => {
+    const ref = createRef<EditorHandle>()
+    render(<Editor ref={ref} content={'``'} vimEnabled={false} livePreviewEnabled />)
+    const view = ref.current!.view()!
+    view.dispatch({ selection: { anchor: 2 } })
+    const handled = view.state
+      .facet(EditorView.inputHandler)
+      .some((h) => h(view, 2, 2, '`', () => view.state.update({ changes: { from: 2, insert: '`' } })))
+    expect(handled).toBe(true)
+    expect(view.state.doc.toString()).toBe('```\n```')
+    expect(view.state.selection.main.head).toBe(3)
   })
 })

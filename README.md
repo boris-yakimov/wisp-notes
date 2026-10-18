@@ -58,6 +58,7 @@ npm ci
 - **Code**: to keep text exactly as written (e.g. `argv[0]`), select it and choose **Code** in the same toolbar
   (or press `Ctrl/Cmd+E`; again inside the code to undo it), or **Code block** to put it on its own lines.
   Brackets that aren't links, like `argv[argc]`, already show as written.
+  Typing ```` ``` ```` at the start of a line adds the closing ```` ``` ```` below; type the language (`js`, `sh`, …) and press Enter.
 - **Tables**: Markdown tables show as a grid; put the cursor in one (click, arrow keys or vim `j`/`k`) to edit its
   Markdown. `Ctrl/Cmd+click` links inside a table to open them. Wide tables scroll sideways.
 - **Images**: paste an image or screenshot (`Ctrl/Cmd+V`, or `Ctrl/Cmd+Shift+V`, which also works in vim normal mode)

@@ -639,3 +639,28 @@ test('argv[0] stays plain text; selected text can be marked as code', async ({ p
   await page.keyboard.press('Enter')
   await expect.poll(() => drive.files()['Inbox.md']).toBe('The first arg is argv[0] here\n\nnext')
 })
+
+for (const vim of [false, true]) {
+  test(`typing \`\`\` adds the closing fence, cursor ready for the language (vim ${vim})`, async ({
+    page,
+    drive,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "CodeMirror's Android input handling ignores synthetic Enter key presses")
+    drive.write('Inbox.md', 'intro')
+    await signedIn(page, vim)
+    await page.goto('/n/Inbox.md')
+    await page.locator('.cm-line').first().click()
+    if (vim) await page.keyboard.type('Go')
+    else {
+      await page.keyboard.press('ControlOrMeta+End')
+      await page.keyboard.press('Enter')
+    }
+    await page.keyboard.type('```js')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('let a = 1')
+    if (vim) await page.keyboard.press('Escape')
+    await page.keyboard.press('ControlOrMeta+s')
+    await expect.poll(() => drive.files()['Inbox.md']).toBe('intro\n```js\nlet a = 1\n```')
+  })
+}

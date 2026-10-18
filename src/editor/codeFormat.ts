@@ -107,3 +107,53 @@ export function applyCode(view: EditorView, block: boolean): boolean {
   view.focus()
   return true
 }
+
+// ------------------------------------------------------------------ auto-closing code fences
+
+/** Is `pos` inside a fenced code block (e.g. typing its closing fence)? */
+function inFencedCode(state: EditorState, pos: number): boolean {
+  for (
+    let n: ReturnType<ReturnType<typeof syntaxTree>['resolveInner']> | null = syntaxTree(state).resolveInner(
+      pos,
+      -1,
+    );
+    n;
+    n = n.parent
+  ) {
+    if (n.name === 'FencedCode') return true
+  }
+  return false
+}
+
+/**
+ * Typing the third backtick of a fence at the start of an (otherwise empty) line adds the closing
+ * fence below and leaves the cursor after the opening one, to type the language (`js`, `sh`, …).
+ * Returns the change, or null to let the input through as typed.
+ */
+export function fenceCompletion(
+  state: EditorState,
+  from: number,
+  to: number,
+  text: string,
+): { changes: Change; selection: { anchor: number } } | null {
+  if (text !== '`' || from !== to) return null
+  const line = state.doc.lineAt(from)
+  const before = state.sliceDoc(line.from, from)
+  const m = /^(\s*)``$/.exec(before)
+  if (!m || state.sliceDoc(from, line.to).trim()) return null
+  if (inFencedCode(state, line.from)) return null // closing an open block
+  const indent = m[1]!
+  return {
+    changes: { from, to, insert: '`\n' + indent + '```' },
+    selection: { anchor: from + 1 },
+  }
+}
+
+/** Auto-closes code fences as they are typed (see `fenceCompletion`). */
+export const autoCloseFences = EditorView.inputHandler.of((view, from, to, text) => {
+  if (view.state.readOnly) return false
+  const spec = fenceCompletion(view.state, from, to, text)
+  if (!spec) return false
+  view.dispatch({ ...spec, userEvent: 'input.type', scrollIntoView: true })
+  return true
+})

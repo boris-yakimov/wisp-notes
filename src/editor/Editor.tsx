@@ -7,7 +7,7 @@ import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view
 import { getCM, Vim, vim } from '@replit/codemirror-vim'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useUi } from '../store/ui.ts'
-import { applyCode } from './codeFormat.ts'
+import { applyCode, autoCloseFences } from './codeFormat.ts'
 import { textColors } from './colors.ts'
 import { inlineImages, type ImageResolver } from './images.ts'
 import { linkClick, plainBrackets } from './links.ts'
@@ -198,6 +198,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           markdownHighlight,
           linkClick((href) => propsRef.current.onOpenLink?.(href)),
           plainBrackets,
+          autoCloseFences,
           EditorView.domEventHandlers({
             paste(e, view) {
               const onPaste = propsRef.current.onPasteImage
