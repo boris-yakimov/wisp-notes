@@ -411,7 +411,7 @@ test('Ctrl+Shift+V pastes an image even in vim normal mode', async ({ page, cont
   await expect(editor).toContainText('from clipboard')
 })
 
-test('tables show as a grid; arrow keys and vim j open them for editing', async ({
+test('tables always show as a grid; clicking a cell edits it, vim j and arrow keys skip the table', async ({
   page,
   drive,
   isMobile,
@@ -428,26 +428,38 @@ test('tables show as a grid; arrow keys and vim j open them for editing', async 
   await expect(table).toBeVisible()
   await expect(table.locator('td').first()).toHaveText('Plan')
 
-  // vim: from "Before", j j → onto the table's first line: Markdown shown
+  // vim: from "Before", j j j → past the table onto "After"; the grid stays
   await editor.getByText('Before').click()
   await page.keyboard.press('Escape')
-  await page.keyboard.type('jj')
-  await expect(table).toHaveCount(0)
-  await expect(editor).toContainText('| Activity | Date |')
-  await page.keyboard.type('G') // last line: grid again
+  await page.keyboard.type('jjj0')
   await expect(table).toBeVisible()
+  await expect(editor).not.toContainText('| Activity | Date |')
+  await page.keyboard.type('x') // vim: delete the character under the cursor
+  await expect(editor).toContainText('fter')
 
-  // Arrow keys (vim off) from the line above enter the table too
+  // Click a cell, type, Enter: saved in the Markdown, still a grid, keys go to the cell and not to vim
+  await table.getByText('May 7').click()
+  const cell = page.getByRole('textbox', { name: 'Edit cell' })
+  await expect(cell).toBeFocused()
+  await cell.fill('May 8 jjx')
+  await page.keyboard.press('Enter')
+  await expect(table.locator('td').nth(1)).toHaveText('May 8 jjx')
+  await page.keyboard.press('ControlOrMeta+s')
+  await expect
+    .poll(() => drive.files()['Trips/Italy.md'])
+    .toContain('| [Plan](../Work/Plan.md) | May 8 jjx |')
+
+  // Arrow keys (vim off) skip the table too
   await page.getByRole('link', { name: 'Settings' }).click()
   await page.getByLabel('Vim mode').uncheck()
   await page.goBack()
   await expect(table).toBeVisible()
   await editor.getByText('Before').click()
-  await page.keyboard.press('ArrowDown')
-  await page.keyboard.press('ArrowDown')
-  await expect(table).toHaveCount(0)
-  await page.keyboard.press('ControlOrMeta+End')
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Home')
   await expect(table).toBeVisible()
+  await page.keyboard.type('!')
+  await expect(editor).toContainText('!fter')
 
   // Ctrl+click on a link in a cell opens the note
   await table.getByText('Plan').click({ modifiers: ['ControlOrMeta'] })

@@ -86,34 +86,75 @@ describe('table preview in the editor', () => {
     expect(table()!.querySelector('th:nth-child(3)')).toHaveStyle({ textAlign: 'right' })
   })
 
-  it('shows Markdown when the cursor is in the table, and the grid again after', () => {
+  it('keeps the grid when the cursor would land in the table, moving it past the table', () => {
     const { view } = setup()
     view.dispatch({ selection: { anchor: DOC.indexOf('May 8') } })
-    expect(table()).toBeNull()
-    expect(view.contentDOM.textContent).toContain('|:--|:-:|--:|')
-    view.dispatch({ selection: { anchor: DOC.length } })
     expect(table()).not.toBeNull()
+    expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(9) // line after the table
+    expect(view.contentDOM.textContent).not.toContain('|:--|:-:|--:|')
+  })
+
+  const cell = (row: number, col: number) =>
+    table()!.querySelector<HTMLElement>(`[data-row="${row}"][data-col="${col}"]`)!
+  const click = (el: Element, init: MouseEventInit = {}) =>
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, ...init }))
+  const input = () => document.querySelector<HTMLTextAreaElement>('.cm-table-input')!
+  const key = (k: string, init: KeyboardEventInit = {}) =>
+    input().dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init }))
+
+  it('clicking a cell edits its Markdown in place; Enter saves only that cell', () => {
+    const { view } = setup()
+    click(cell(1, 1))
+    expect(input().value).toBe('May 7')
+    expect(document.activeElement).toBe(input())
+    input().value = 'May 9 | late'
+    key('Enter')
+    expect(view.state.doc.line(7).text).toBe(
+      '| [Arrival](italy/Arrival.md) | May 9 \\| late | **flight** 20:10; `a\\|b` |',
+    )
+    expect(input()).toBeNull()
+    expect(cell(1, 1).textContent).toBe('May 9 | late')
+  })
+
+  it('Escape cancels; Tab moves on and adds a row after the last cell', () => {
+    const { view } = setup()
+    click(cell(0, 0))
+    input().value = 'changed'
+    key('Escape')
+    expect(view.state.doc.toString()).toBe(DOC)
+    expect(cell(0, 0).textContent).toBe('Activity')
+
+    click(cell(2, 1))
+    key('Tab')
+    expect(input().closest('td')!.dataset).toMatchObject({ row: '2', col: '2' })
+    input().value = 'done'
+    key('Tab') // last cell: new row
+    expect(view.state.doc.line(8).text).toBe('|  | May 8 | done |')
+    expect(view.state.doc.line(9).text).toBe('|  |  |  |')
+    expect(input().closest('td')!.dataset).toMatchObject({ row: '3', col: '0' })
+    key('Tab', { shiftKey: true })
+    expect(input().closest('td')!.dataset).toMatchObject({ row: '2', col: '2' })
   })
 
   it('opens a link in a cell with Ctrl/Cmd+click', () => {
     const { onOpenLink } = setup()
     const link = table()!.querySelector('.cm-table-link')!
-    link.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, ctrlKey: true }))
+    click(link, { ctrlKey: true })
     expect(onOpenLink).toHaveBeenCalledWith('italy/Arrival.md')
+    expect(input()).toBeNull()
   })
 
-  it('moving down from the line above enters the table instead of skipping it', () => {
+  it('moving down or up over the table skips it', () => {
     const { view } = setup()
-    const above = view.state.doc.line(4) // blank line right above the table
-    view.dispatch({ selection: { anchor: above.from } })
-    // What a vertical motion over a block widget does: jump to the line after the table
-    view.dispatch({ selection: { anchor: view.state.doc.line(9).from }, userEvent: 'select' })
-    expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(5)
-    expect(table()).toBeNull()
-    // A click is not redirected
-    view.dispatch({ selection: { anchor: above.from } })
-    view.dispatch({ selection: { anchor: view.state.doc.line(9).from }, userEvent: 'select.pointer' })
-    expect(view.state.doc.lineAt(view.state.selection.main.head).number).toBe(9)
+    const line = () => view.state.doc.lineAt(view.state.selection.main.head).number
+    view.dispatch({ selection: { anchor: view.state.doc.line(4).from } }) // blank line above
+    view.dispatch({ selection: { anchor: view.state.doc.line(5).from }, userEvent: 'select' })
+    expect(line()).toBe(9)
+    view.dispatch({ selection: { anchor: view.state.doc.line(8).from }, userEvent: 'select' })
+    expect(line()).toBe(4)
+    // A selection over the whole table is kept
+    view.dispatch({ selection: { anchor: 0, head: DOC.length } })
+    expect(view.state.selection.main).toMatchObject({ anchor: 0, head: DOC.length })
   })
 
   it('leaves tables as Markdown when live preview is off', () => {

@@ -64,8 +64,10 @@ npm ci
   (or press `Ctrl/Cmd+E`; again inside the code to undo it), or **Code block** to put it on its own lines.
   Brackets that aren't links, like `argv[argc]`, already show as written.
   Typing ` ``` ` at the start of a line adds the closing ` ``` ` below; type the language (`js`, `sh`, …) and press Enter.
-- **Tables**: Markdown tables show as a grid; put the cursor in one (click, arrow keys or vim `j`/`k`) to edit its
-  Markdown. `Ctrl/Cmd+click` links inside a table to open them. Wide tables scroll sideways.
+- **Tables**: Markdown tables always show as a grid. Click a cell to edit it: Enter or clicking away saves,
+  Escape cancels, `Tab` / `Shift+Tab` move to the next / previous cell, and `Tab` in the last cell adds a row.
+  `Ctrl/Cmd+click` links inside a table to open them. Wide tables scroll sideways. To add or remove columns, turn
+  off live preview in Settings and edit the Markdown.
 - **Images**: paste an image or screenshot (`Ctrl/Cmd+V`, or `Ctrl/Cmd+Shift+V`, which also works in vim normal mode)
   into a note: it appears right away and is saved to Drive
   next to the note (`Plan.md` → `Plan/Pasted image ….png`). `![](image.png)` links to images in your notes folder
