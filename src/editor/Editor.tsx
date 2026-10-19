@@ -27,6 +27,7 @@ import { textColors } from './colors.ts'
 import { inlineImages, type ImageResolver } from './images.ts'
 import { linkClick, plainBrackets } from './links.ts'
 import { livePreview } from './livePreview.ts'
+import { dashStartsList } from './markdownSyntax.ts'
 import type { ViewPosition } from './positions.ts'
 import { tablePreview } from './tables.ts'
 import { editorTheme, markdownHighlight } from './theme.ts'
@@ -237,7 +238,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
           history(),
           drawSelection(),
           EditorView.lineWrapping,
-          markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: true }),
+          markdown({
+            base: markdownLanguage,
+            codeLanguages: languages,
+            addKeymap: true,
+            extensions: [dashStartsList],
+          }),
           markdownHighlight,
           linkClick((href) => propsRef.current.onOpenLink?.(href)),
           plainBrackets,
