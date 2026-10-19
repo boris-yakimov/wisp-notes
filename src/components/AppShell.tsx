@@ -46,7 +46,12 @@ export function AppShell({ sidebar, main, topBarRight, statusBar }: AppShellProp
           </button>
         )}
         <h1 className="truncate text-sm font-semibold tracking-tight">
-          <Link to="/" className="rounded px-1 hover:text-indigo-600 dark:hover:text-indigo-400">
+          <Link
+            to="/"
+            className="flex items-center gap-1.5 rounded px-1 hover:text-indigo-600 dark:hover:text-indigo-400"
+          >
+            {/* Same image as the favicon; decorative, the text names the link. */}
+            <img src="/favicon.svg" alt="" width={18} height={18} className="shrink-0" />
             Wisp Notes
           </Link>
         </h1>
