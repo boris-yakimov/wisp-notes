@@ -1,3 +1,4 @@
+import { undo } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
@@ -178,6 +179,58 @@ describe('table preview in the editor', () => {
     expect(view.state.doc.toString()).toBe(`Before\n\n${TABLE}\n`)
     expect(view.state.selection.main.head).toBe(view.state.doc.length) // on the new last line
     view.dispatch(view.state.replaceSelection('After'))
-    expect(view.state.doc.toString()).toBe(`Before\n\n${TABLE}\nAfter`)
+    expect(view.state.doc.toString()).toBe(`Before\n\n${TABLE}\n\nAfter`)
+    ensureSyntaxTree(view.state, view.state.doc.length, 5000)
+    view.dispatch({ selection: { anchor: 0 } })
+    expect(findTables(view.state)[0]!.rows).toHaveLength(2) // "After" is not a table row
+  })
+
+  it('undo removes a paste below a table at the end, even after the cursor moved onto the table', () => {
+    const ref = createRef<EditorHandle>()
+    const doc = `Before\n\n${TABLE}`
+    render(<Editor ref={ref} content={doc} vimEnabled={false} livePreviewEnabled />)
+    const view = ref.current!.view()!
+    ensureSyntaxTree(view.state, view.state.doc.length, 5000)
+    view.dispatch({ selection: { anchor: 0 } })
+    view.dispatch({ selection: { anchor: view.state.doc.length }, userEvent: 'select' }) // adds a line
+    expect(view.state.doc.toString()).toBe(`${doc}\n`)
+    view.dispatch(view.state.replaceSelection('pasted'))
+    ensureSyntaxTree(view.state, view.state.doc.length, 5000)
+    // Moving onto the (now longer) table adds a line again: that must not get in undo's way
+    view.dispatch({ selection: { anchor: view.state.doc.length - 1 }, userEvent: 'select' })
+    undo(view)
+    expect(view.state.doc.toString()).not.toContain('pasted')
+  })
+
+  it('typing on the blank line right after a table keeps the text out of the table', () => {
+    const { view } = setup()
+    view.dispatch({ selection: { anchor: view.state.doc.line(9).from } }) // blank line after the table
+    view.dispatch(view.state.replaceSelection('x'))
+    expect(view.state.doc.toString()).toBe(`# Italy\n\nBefore\n\n${TABLE}\n\nx\nAfter`)
+    expect(view.state.selection.main.head).toBe(view.state.doc.line(10).to)
+  })
+
+  it('deleting the blank line between a table and the text below keeps the text out of the table', () => {
+    const { view } = setup()
+    const doc = view.state.doc
+    // Backspace at the start of "After": joins it to the blank line
+    const blank = doc.line(9).from
+    view.dispatch({ selection: { anchor: doc.line(10).from } })
+    view.dispatch({
+      changes: { from: blank, to: blank + 1 },
+      selection: { anchor: blank },
+      userEvent: 'delete.backward',
+    })
+    expect(view.state.doc.toString()).toBe(DOC)
+    expect(view.state.doc.lineAt(view.state.selection.main.head).text).toBe('After')
+    // Deleting the blank line itself (vim dd)
+    view.dispatch({
+      changes: { from: doc.line(9).from, to: doc.line(10).from },
+      userEvent: 'delete.line',
+    })
+    expect(view.state.doc.toString()).toBe(DOC)
+    ensureSyntaxTree(view.state, view.state.doc.length, 5000)
+    view.dispatch({ selection: { anchor: 0 } })
+    expect(findTables(view.state)[0]!.rows).toHaveLength(2)
   })
 })

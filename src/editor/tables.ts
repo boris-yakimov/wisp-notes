@@ -1,5 +1,12 @@
 import { syntaxTree } from '@codemirror/language'
-import { EditorSelection, EditorState, StateField, type Extension } from '@codemirror/state'
+import {
+  Annotation,
+  EditorSelection,
+  EditorState,
+  StateField,
+  Transaction,
+  type Extension,
+} from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { COLOR_SPAN_SOURCE } from '../repo/textColors.ts'
 
@@ -247,7 +254,7 @@ function editCell(view: EditorView, wrap: HTMLElement, row: number, col: number)
     done = true
     const cur = tableOf(view, wrap) ?? t
     const change = save ? cellChange(view.state, cur, row, col, input.value) : null
-    if (change) view.dispatch({ changes: change, userEvent: 'input' })
+    if (change) view.dispatch({ changes: change, userEvent: 'input', annotations: tableEdit.of(true) })
     else {
       cell.classList.remove('cm-table-editing')
       cell.style.minWidth = ''
@@ -261,7 +268,11 @@ function editCell(view: EditorView, wrap: HTMLElement, row: number, col: number)
     while (i >= 0 && i < cols && i >= now.header.length) i += step
     if (i < 0) return view.focus()
     if (i >= (now.rows.length + 1) * cols) {
-      view.dispatch({ changes: { from: now.to, insert: emptyRow(cols) }, userEvent: 'input' })
+      view.dispatch({
+        changes: { from: now.to, insert: emptyRow(cols) },
+        userEvent: 'input',
+        annotations: tableEdit.of(true),
+      })
     }
     const next = wrapAt(view, now.from)
     if (next) editCell(view, next, Math.floor(i / cols), i % cols)
@@ -348,6 +359,12 @@ interface TableState {
   deco: DecorationSet
 }
 
+/** The transaction's user event annotation, if it has one (to carry it over to a replacement). */
+const userEvent = (tr: Transaction) => {
+  const e = tr.annotation(Transaction.userEvent)
+  return e ? [Transaction.userEvent.of(e)] : []
+}
+
 /**
  * Keep the cursor off a table's Markdown: a cursor that would land in a table (arrow keys, vim j/k,
  * clicks beside it) goes to the line after it, or before it when moving up. A selection may still span
@@ -378,7 +395,8 @@ function keepCursorOut(field: StateField<TableState>) {
         if (from > to || !inside) continue
         const before = from > 0 ? at(from - 1) : null
         const after = to < doc.length ? at(to + 1) : null
-        if (after === null && oldPos <= to) {
+        // Not on undo/redo: they restore an earlier cursor, and adding a line would undo the undo.
+        if (after === null && oldPos <= to && !tr.isUserEvent('undo') && !tr.isUserEvent('redo')) {
           changed = addLine = true
           const end = doc.length + 1 // on the added line
           return r.empty ? EditorSelection.cursor(end) : EditorSelection.range(r.anchor, end)
@@ -391,6 +409,16 @@ function keepCursorOut(field: StateField<TableState>) {
       return r
     })
     if (!changed) return tr
+    if (addLine && !tr.docChanged) {
+      // A cursor move that adds the line: keep it out of the undo history, so undo skips it.
+      return {
+        changes: { from: doc.length, insert: '\n' },
+        selection: EditorSelection.create(ranges, sel.mainIndex),
+        scrollIntoView: tr.scrollIntoView,
+        effects: tr.effects,
+        annotations: [Transaction.addToHistory.of(false), ...userEvent(tr)],
+      }
+    }
     return [
       tr,
       {
@@ -399,6 +427,39 @@ function keepCursorOut(field: StateField<TableState>) {
         sequential: true,
       },
     ]
+  })
+}
+
+/** Marks edits made by the table grid itself (cell edits, new rows): they may change the table's last line. */
+const tableEdit = Annotation.define<boolean>()
+
+const isBlank = (text: string) => text.trim() === ''
+
+/**
+ * Keep text below a table out of it. In GFM any non-blank line directly after a table is a table row,
+ * so a table needs a blank line after it before other text. An edit that would put text right after a
+ * table that had a blank line (or nothing) after it, such as typing on that blank line or deleting it,
+ * gets the blank line back. Edits from the grid and undo/redo are left alone.
+ */
+function keepTextOutOfTables(field: StateField<TableState>) {
+  return EditorState.transactionFilter.of((tr) => {
+    if (!tr.docChanged || tr.annotation(tableEdit) || tr.isUserEvent('undo') || tr.isUserEvent('redo'))
+      return tr
+    const tables = tr.startState.field(field, false)?.tables ?? []
+    if (!tables.length) return tr
+    const start = tr.startState.doc
+    const doc = tr.newDoc
+    const at = new Set<number>()
+    for (const t of tables) {
+      const separated = t.to === start.length || isBlank(start.lineAt(t.to + 1).text)
+      if (!separated) continue
+      const from = tr.changes.mapPos(t.from, 1)
+      const to = tr.changes.mapPos(t.to, -1)
+      if (from >= to || to >= doc.length) continue
+      if (!isBlank(doc.lineAt(to + 1).text)) at.add(to)
+    }
+    if (!at.size) return tr
+    return [tr, { changes: [...at].map((from) => ({ from, insert: '\n' })), sequential: true }]
   })
 }
 
@@ -420,5 +481,5 @@ export function tablePreview(open: (href: string) => void): Extension {
     },
     provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
   })
-  return [field, keepCursorOut(field)]
+  return [field, keepCursorOut(field), keepTextOutOfTables(field)]
 }
