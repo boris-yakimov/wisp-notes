@@ -368,6 +368,8 @@ function keepCursorOut(field: StateField<TableState>) {
       return l.from + Math.min(col, l.length)
     }
     let changed = false
+    // A table at the very end of the note has no line after it: add one so the cursor can go below it.
+    let addLine = false
     const ranges = sel.ranges.map((r) => {
       for (const t of tables) {
         const from = tr.changes.mapPos(t.from, 1)
@@ -376,6 +378,11 @@ function keepCursorOut(field: StateField<TableState>) {
         if (from > to || !inside) continue
         const before = from > 0 ? at(from - 1) : null
         const after = to < doc.length ? at(to + 1) : null
+        if (after === null && oldPos <= to) {
+          changed = addLine = true
+          const end = doc.length + 1 // on the added line
+          return r.empty ? EditorSelection.cursor(end) : EditorSelection.range(r.anchor, end)
+        }
         const head = oldPos > to ? (before ?? after) : (after ?? before)
         if (head === null) return r
         changed = true
@@ -384,7 +391,14 @@ function keepCursorOut(field: StateField<TableState>) {
       return r
     })
     if (!changed) return tr
-    return [tr, { selection: EditorSelection.create(ranges, sel.mainIndex), sequential: true }]
+    return [
+      tr,
+      {
+        changes: addLine ? { from: doc.length, insert: '\n' } : undefined,
+        selection: EditorSelection.create(ranges, sel.mainIndex),
+        sequential: true,
+      },
+    ]
   })
 }
 

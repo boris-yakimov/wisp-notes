@@ -161,4 +161,23 @@ describe('table preview in the editor', () => {
     setup(false)
     expect(table()).toBeNull()
   })
+
+  it('a table pasted at the end of a note gets a line below it to keep writing on', () => {
+    const ref = createRef<EditorHandle>()
+    render(<Editor ref={ref} content={'Before\n\n'} vimEnabled={false} livePreviewEnabled />)
+    const view = ref.current!.view()!
+    view.dispatch({ selection: { anchor: view.state.doc.length } })
+    view.dispatch({
+      changes: { from: view.state.doc.length, insert: TABLE },
+      selection: { anchor: view.state.doc.length + TABLE.length },
+      userEvent: 'input.paste',
+    })
+    ensureSyntaxTree(view.state, view.state.doc.length, 5000)
+    view.dispatch({ selection: { anchor: view.state.doc.length }, userEvent: 'select' })
+    expect(table()).not.toBeNull()
+    expect(view.state.doc.toString()).toBe(`Before\n\n${TABLE}\n`)
+    expect(view.state.selection.main.head).toBe(view.state.doc.length) // on the new last line
+    view.dispatch(view.state.replaceSelection('After'))
+    expect(view.state.doc.toString()).toBe(`Before\n\n${TABLE}\nAfter`)
+  })
 })
