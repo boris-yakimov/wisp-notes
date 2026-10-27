@@ -68,6 +68,9 @@ the app only sees files it created or imported.
   downloaded via the Drive API, cached by MD5 in IndexedDB (`files` store) and shown as `blob:` URLs (`img-src blob:`);
   remote image URLs are not loaded. Pasted images (`RepoSession.pasteImage`, name from `pastedImage` in `ops.ts`) are
   uploaded into the note's sub-note folder and shown from memory immediately.
+- Attachments opened from links (`RepoSession.tabUrl`) keep their MIME type only if it can't run script (PNG, JPEG,
+  GIF, WebP, PDF, plain text); anything else (HTML, SVG, XML, …) gets `application/octet-stream` and is downloaded,
+  because a `blob:` document runs on the app's origin and could read the token.
 
 ## Testing
 

@@ -18,6 +18,19 @@ const draftWrite = (d: Draft): DriveOp => ({
   base: d.baseHash,
 })
 
+/**
+ * MIME types that can't run script and may be opened in a tab on the app's origin. Never add
+ * text/html, image/svg+xml, application/xhtml+xml or XML types here.
+ */
+const TAB_SAFE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+])
+
 export interface Notice {
   id: number
   kind: 'info' | 'error'
@@ -283,10 +296,26 @@ export class RepoSession {
    * URLs are reused per content hash and revoked when the session ends.
    */
   fileUrl(path: string): Promise<string> {
+    return this.objectUrl(path, '', (blob) => blob)
+  }
+
+  /**
+   * Object URL that is safe to open in a new tab. A `blob:` document runs on the app's origin (it
+   * could read the token in localStorage), so only passive types keep their MIME type; anything else
+   * (HTML, SVG, XML, …) becomes `application/octet-stream` and is downloaded instead of rendered.
+   */
+  tabUrl(path: string): Promise<string> {
+    return this.objectUrl(path, 'tab:', (blob) => {
+      const type = blob.type.split(';')[0]!.trim().toLowerCase()
+      return TAB_SAFE_TYPES.has(type) ? blob : new Blob([blob], { type: 'application/octet-stream' })
+    })
+  }
+
+  private objectUrl(path: string, prefix: string, prepare: (blob: Blob) => Blob): Promise<string> {
     const e = this.shown.get(path)
     if (!e || e.folder) return Promise.reject(new DriveError('not-found', `"${path}" does not exist.`))
     const local = this.localFiles.get(path)
-    const key = local ? `local:${path}` : (e.md5 ?? e.id)
+    const key = prefix + (local ? `local:${path}` : (e.md5 ?? e.id))
     let url = this.fileUrls.get(key)
     if (!url) {
       url = (async () => {
@@ -297,7 +326,7 @@ export class RepoSession {
           blob = await this.client.downloadBlob(e.id)
           if (e.md5) await this.cache.putFile(e.md5, blob)
         }
-        return URL.createObjectURL(blob)
+        return URL.createObjectURL(prepare(blob))
       })()
       this.fileUrls.set(key, url)
       url.catch(() => this.fileUrls.delete(key))

@@ -17,6 +17,9 @@ import { SubPages } from './SubPages.tsx'
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; content: string }
 
+/** Attachments shown in a new tab; others are downloaded (`session.tabUrl` also checks the MIME type). */
+const VIEWABLE_IN_TAB = /\.(png|jpe?g|gif|webp|pdf|txt)$/i
+
 /** Route /n/<path>: loads a note and edits it. */
 export function NotePage() {
   // From the raw URL: the router's splat param would turn an encoded "/" in a name into a separator.
@@ -103,11 +106,22 @@ function NoteView({ path }: { path: string }) {
     (href: string) => {
       const target = resolveLink(href, path)
       if (target?.kind === 'note') navigate(notePathToUrl(target.path))
-      else if (target?.kind === 'file') {
+      else if (target?.kind === 'file' && !VIEWABLE_IN_TAB.test(target.path)) {
+        // HTML, SVG, archives, …: download with the real name (never rendered on the app's origin).
+        session.tabUrl(target.path).then(
+          (url) => {
+            const a = document.createElement('a')
+            a.href = url
+            a.download = fileName(target.path)
+            a.click()
+          },
+          (e: Error) => notify(`Could not open “${fileName(target.path)}”: ${e.message}`, 'error'),
+        )
+      } else if (target?.kind === 'file') {
         // Open the tab now (still in the click), then point it at the downloaded file.
         const tab = window.open('', '_blank')
         if (tab) tab.opener = null
-        session.fileUrl(target.path).then(
+        session.tabUrl(target.path).then(
           (url) => tab?.location.replace(url),
           (e: Error) => {
             tab?.close()
