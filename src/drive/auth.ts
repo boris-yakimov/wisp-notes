@@ -121,7 +121,16 @@ export class GoogleAuth implements TokenProvider {
   signOut(): void {
     const t = this.stored()
     localStorage.removeItem(TOKEN_KEY)
-    if (t) this.oauth2?.revoke(t.token)
+    if (t) {
+      // Revoke even if GIS isn't loaded on this page yet. Best effort: if it can't load (offline),
+      // the token still expires within an hour.
+      if (this.oauth2) this.oauth2.revoke(t.token)
+      else
+        void this.load().then(
+          (o) => o.revoke(t.token),
+          () => undefined,
+        )
+    }
     this.emit()
   }
 

@@ -1,0 +1,10 @@
+# Cloudflare Pages response headers (copied to dist/ by the build).
+# HSTS and X-Content-Type-Options are set in the Cloudflare zone settings.
+# frame-ancestors only works as a header (browsers ignore it in the <meta> CSP from vite.config.ts).
+# same-origin-allow-popups keeps the Google sign-in popup working.
+/*
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Cross-Origin-Opener-Policy: same-origin-allow-popups

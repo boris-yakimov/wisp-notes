@@ -7,7 +7,8 @@ import { inlineLimit, logosPlugin } from './logosPlugin.ts'
  * Strict Content Security Policy, injected only into production builds
  * (the dev server needs inline scripts for React Fast Refresh).
  * The Google access token lives in the browser, so XSS is the main risk: only our own scripts plus
- * Google's sign-in library may run, and the only remote hosts are the Drive API and Google sign-in.
+ * Google's sign-in library may run, and the only remote hosts are the Drive API and Google sign-in
+ * (including its token revoke endpoint, used on sign-out).
  * 'unsafe-inline' for styles is required by CodeMirror's runtime style injection.
  */
 export const CSP = [
@@ -17,7 +18,7 @@ export const CSP = [
   'frame-src https://accounts.google.com/gsi/',
   "img-src 'self' data: blob:",
   "font-src 'self'",
-  "connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/",
+  "connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/ https://oauth2.googleapis.com/revoke",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",

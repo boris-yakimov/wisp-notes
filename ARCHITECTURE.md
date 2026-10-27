@@ -64,7 +64,9 @@ the app only sees files it created or imported.
 - `drive.file` limits access to the app's own files. Token in `localStorage` only until it expires; sign-out
   revokes it and clears local data.
 - Production build injects a strict CSP (`vite.config.ts`): own scripts plus `accounts.google.com/gsi/client`;
-  `connect-src` limited to `www.googleapis.com` and GIS. Markdown is never rendered as HTML. Images in notes (`editor/images.ts`) are repo files only:
+  `connect-src` limited to `www.googleapis.com`, GIS and its token revoke endpoint (`oauth2.googleapis.com/revoke`).
+  `public/_headers` (Cloudflare Pages) adds `frame-ancestors 'none'` and other headers a `<meta>` CSP can't set.
+  Markdown is never rendered as HTML. Images in notes (`editor/images.ts`) are repo files only:
   downloaded via the Drive API, cached by MD5 in IndexedDB (`files` store) and shown as `blob:` URLs (`img-src blob:`);
   remote image URLs are not loaded. Pasted images (`RepoSession.pasteImage`, name from `pastedImage` in `ops.ts`) are
   uploaded into the note's sub-note folder and shown from memory immediately.
